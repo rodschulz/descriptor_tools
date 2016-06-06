@@ -7,11 +7,13 @@ import sys
 import subprocess
 import shutil
 import yaml
+import datetime
 
 dataDirectory = '/home/rodrigo/Documents/RGBD_summary/'
 appDirectory = '/home/rodrigo/Documents/repos/descriptor_apps/'
 appLocation = 'build/DenseEvaluator'
-configLocation = 'config/config_dense_evaluator.yaml' 
+configLocation = 'config/config_dense_evaluator.yaml'
+resultsLocation = './results/' 
 
 ##################################################
 def getClusterNumber(fileName):
@@ -26,15 +28,27 @@ def getClusterNumber(fileName):
 
 ##################################################
 def getDestination(nclusters):
+    # create results directory if it doesnt exists
+    os.makedirs(resultsLocation, exist_ok=True)
+    
+    # check the destination directory
     experiment = 1
     while(True):
-        destination = './clusters_' + str(nclusters) + '_exp_' + str(experiment) + '/'
-        if (not os.path.exists(destination)):
+        destination = 'clusters' + str(nclusters) + '_exp' + str(experiment)
+        
+        # check if the experiment number is already used
+        change = False
+        for f in os.listdir(resultsLocation):            
+            if destination in f:
+                experiment = experiment + 1
+                change = True
+                break
+        
+        # if no change was done, then this is the right directory name
+        if not change:
             break
-        
-        experiment = experiment + 1
-        
-    return destination
+
+    return resultsLocation + destination + '_{:%Y-%m-%d_%H%M%S}/'.format(datetime.datetime.now())
 
 ##################################################
 def moveOutputData(destination, inputLine):
