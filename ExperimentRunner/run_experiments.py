@@ -9,8 +9,6 @@ import shutil
 import yaml
 import datetime
 
-dataDirectory = '/home/rodrigo/Documents/RGBD_summary/'
-appDirectory = '/home/rodrigo/Documents/repos/descriptor_apps/'
 appLocation = 'build/DenseEvaluator'
 configLocation = 'config/config_dense_evaluator.yaml'
 resultsLocation = './results/' 
@@ -51,7 +49,7 @@ def getDestination(nclusters):
     return resultsLocation + destination + '_{:%Y-%m-%d_%H%M%S}/'.format(datetime.datetime.now())
 
 ##################################################
-def moveOutputData(destination, inputLine):
+def moveOutputData(appDirectory, destination, inputLine):
     parts = inputLine.split('/')
     inputDir = parts[len(parts) - 2]
     inputFile = parts[len(parts) - 1].split('.')[0]
@@ -66,6 +64,8 @@ def moveOutputData(destination, inputLine):
 ##################################################
 def main():
     try:
+        # get the application's directory
+        appDirectory = os.path.abspath(sys.argv[1]) + '/'
         # get number of clusters to be used in the reduction process
         nclusters = getClusterNumber(appDirectory + configLocation)
         # get destination directory
@@ -73,7 +73,7 @@ def main():
     
         # read the input and process the data
         FNULL = open(os.devnull, 'w')
-        with open(sys.argv[1]) as clouds:
+        with open(sys.argv[2]) as clouds:
             for line in clouds:
                 line = line.replace('\n', '')
                 
@@ -90,7 +90,7 @@ def main():
                 
                 if process.returncode == 0:
                     print('\t...execution successful, copying results')
-                    moveOutputData(destination, line)
+                    moveOutputData(appDirectory, destination, line)
                 else:
                     print('\t...execution failed')
 
