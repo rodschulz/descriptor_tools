@@ -52,8 +52,9 @@ def getDestination(nclusters):
 
 ##################################################
 def moveOutputData(destination, inputLine):
-    inputDir = inputLine.split('/')[0]
-    inputFile = inputLine.split('/')[1].split('.')[0]
+    parts = inputLine.split('/')
+    inputDir = parts[len(parts) - 2]
+    inputFile = parts[len(parts) - 1].split('.')[0]
     
     source = appDirectory + 'output/'
     dest = destination + inputDir + '/' + inputFile + '/'
@@ -83,7 +84,7 @@ def main():
                 print('Processing file: ' + line)
                 
                 # run the appLocation and wait
-                cmd = appDirectory + appLocation + ' ' + dataDirectory + line + ' | tee DenseEvaluator.log; mv DenseEvaluator.log output/' 
+                cmd = appDirectory + appLocation + ' ' + line + ' | tee DenseEvaluator.log; mv DenseEvaluator.log output/' 
                 process = subprocess.Popen(cmd, cwd=appDirectory, shell=True, stdout=FNULL, stderr=subprocess.STDOUT)
                 process.wait()
                 

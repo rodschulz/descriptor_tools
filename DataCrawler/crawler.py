@@ -5,8 +5,6 @@
 import os
 import sys
 
-#stargetDirectory = '/home/rodrigo/Documents/RGBD_summary/'
-
 ##################################################
 def traverseDirectory(directory, output):
     for f in os.listdir(directory):
@@ -31,7 +29,7 @@ def main():
         print('Generating output file')
         output = open('./crawled_files', 'w+')
         for f in files:
-            output.write(f.replace(targetDirectory, '') + '\n')
+            output.write(os.path.abspath(f) + '\n')
         
     except IOError as e:
         print('Cant create output file: ' + str(e))
