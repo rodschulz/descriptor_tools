@@ -64,6 +64,11 @@ def moveOutputData(appDirectory, destination, inputLine):
 ##################################################
 def main():
     try:
+    	if (len(sys.argv) < 2):
+    		print('NOT ENOUGH ARGUMENTS GIVEN.\n')
+    		print('   Usage: python run_experiments.py <app_dir_location> <cloud_list_location>\n\n')
+    		return
+
         # get the application's directory
         appDirectory = os.path.abspath(sys.argv[1]) + '/'
         # get number of clusters to be used in the reduction process
