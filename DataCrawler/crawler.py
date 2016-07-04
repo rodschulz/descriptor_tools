@@ -18,6 +18,11 @@ def traverseDirectory(directory, output):
 ##################################################
 def main():
     try:
+        if (len(sys.argv) < 2):
+            print('NOT ENOUGH ARGUMENTS GIVEN.\n')
+            print('   Usage: python crawler.py <target_dir>\n\n')
+            return
+
         targetDirectory = sys.argv[1]
         
         # retrieve the files in the folder
