@@ -104,5 +104,9 @@ def main():
     
 ##################################################
 if __name__ == '__main__':
-    main()
+    # Check the right version
+    if int(sys.version[0]) < 3:
+        print('  ERROR: wrong Python version, required 3.x.x\n')
+    else:
+        main()
 
