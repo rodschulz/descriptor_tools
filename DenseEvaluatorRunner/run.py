@@ -66,7 +66,7 @@ def main():
     try:
         if (len(sys.argv) < 3):
             print('NOT ENOUGH ARGUMENTS GIVEN.\n')
-            print('   Usage: python run_experiments.py <app_dir_location> <cloud_list_location>\n\n')
+            print('   Usage: python run.py <app_dir_location> <cloud_list_location>\n\n')
             return
 
         # get the application's directory
