@@ -1,4 +1,4 @@
 clusters*
 proj/*
-DataCrawler/crawled_files
-ExperimentRunner/results/*
+FileCrawler/crawled_files
+DenseEvaluatorRunner/results/*
