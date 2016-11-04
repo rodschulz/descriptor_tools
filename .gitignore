@@ -1,3 +1,4 @@
 clusters*
+proj/*
 DataCrawler/crawled_files
 ExperimentRunner/results/*
