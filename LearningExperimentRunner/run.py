@@ -7,7 +7,7 @@ import sys
 import shutil
 import subprocess
 import time
-import thread
+import datetime
 import signal
 import socket
 
@@ -15,9 +15,9 @@ import socket
 IP = '127.0.0.1'
 PORT = 5008
 CMD_EXP = 'exec roslaunch pr2_grasping all.launch world:='
-CMD_MON = 'exec python ./LearningExperimentRunner/experiment_monitor_node.py '
+CMD_MON = 'exec python ./experiment_monitor_node.py '
 OUTPUT_DIR = 'output/'
-RESULTS_DIR = './results/' 
+RESULTS_DIR = 'results/' 
 
 
 ##################################################
@@ -36,7 +36,7 @@ def cleanOutputDir(pkgDir_):
 ##################################################
 def getExpDestination():
 	# create results directory
-	os.makedirs(RESULTS_DIR, exist_ok=True)
+	subprocess.call(['mkdir','-p', RESULTS_DIR])
 
 	# check the destination directory
 	experiment = 1
@@ -60,11 +60,15 @@ def getExpDestination():
 
 ##################################################
 def copyResults(src_, dest_):
+	# create results subdirectory
+	subprocess.call(['mkdir','-p', dest_])
+
+	# copy files
 	files = os.listdir(src_)
 	for f in files:
-		filename = os.path.join(src, f)
+		filename = os.path.join(src_, f)
 		if (os.path.isfile(filename)):
-			shutil.copy(filename, dest_)
+			shutil.move(filename, dest_)
 
 
 ##################################################
@@ -94,10 +98,10 @@ if __name__ == '__main__':
 			packageDir = getPackageDir()
 
 			print('Cleaning output directory...')
-			cleanOutputDir(packageDir)
-			resultsDestination = getExpDestination()
+			# cleanOutputDir(packageDir)
+			resultsDest = getExpDestination()
 
-			copyResults(packageDir + OUTPUT_DIR, resultsDestination)
+			copyResults(packageDir + OUTPUT_DIR, resultsDest)
 			sys.exit(0)
 
 
