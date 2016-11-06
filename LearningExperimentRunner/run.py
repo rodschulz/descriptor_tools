@@ -98,11 +98,8 @@ if __name__ == '__main__':
 			packageDir = getPackageDir()
 
 			print('Cleaning output directory...')
-			# cleanOutputDir(packageDir)
+			cleanOutputDir(packageDir)
 			resultsDest = getExpDestination()
-
-			copyResults(packageDir + OUTPUT_DIR, resultsDest)
-			sys.exit(0)
 
 
 			# set the port to listen the experiment monitor node
@@ -150,9 +147,13 @@ if __name__ == '__main__':
 					while experimentProcess.poll() is None:
 						time.sleep(2)
 
+					# copy experiment results
+					copyResults(packageDir + OUTPUT_DIR, resultsDest)
+
+
 					print('\t...world "' + world + '" done')
 					print('\t...waiting for system to be ready\n')
-					time.sleep(5)
+					time.sleep(3)
 
 
 			connection.close()
