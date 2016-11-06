@@ -2,3 +2,6 @@ clusters*
 proj/*
 FileCrawler/crawled_files
 DenseEvaluatorRunner/results/*
+DenseEvaluatorRunner/cloud_set*
+LearningExperimentRunner/results/*
+LearningExperimentRunner/world_set*
