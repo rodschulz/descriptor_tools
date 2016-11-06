@@ -4,6 +4,7 @@
 '''
 import os
 import sys
+import shutil
 import subprocess
 import time
 import thread
@@ -15,13 +16,70 @@ IP = '127.0.0.1'
 PORT = 5008
 CMD_EXP = 'exec roslaunch pr2_grasping all.launch world:='
 CMD_MON = 'exec python ./LearningExperimentRunner/experiment_monitor_node.py '
+OUTPUT_DIR = 'output/'
+RESULTS_DIR = './results/' 
+
+
+##################################################
+def getPackageDir():
+	pkgDir =subprocess.check_output(['rospack', 'find', 'pr2_grasping'])
+	return pkgDir.replace('\n', '/')
+
+
+##################################################
+def cleanOutputDir(pkgDir_):
+	outputDir = pkgDir_ + OUTPUT_DIR
+	shutil.rmtree(outputDir)
+	os.mkdir(outputDir)
+
+
+##################################################
+def getExpDestination():
+	# create results directory
+	os.makedirs(RESULTS_DIR, exist_ok=True)
+
+	# check the destination directory
+	experiment = 1
+	while(True):
+		destination = 'exp' + str(experiment)
+
+		# check if the experiment number is already used
+		change = False
+		for f in os.listdir(RESULTS_DIR):
+			if destination in f:
+				experiment = experiment + 1
+				change = True
+				break
+
+		# if no change was done, then this is the right directory name
+		if not change:
+			break
+
+	return RESULTS_DIR + destination + '_{:%Y-%m-%d_%H%M%S}/'.format(datetime.datetime.now())
+
+
+##################################################
+def copyResults(src_, dest_):
+	files = os.listdir(src_)
+	for f in files:
+		filename = os.path.join(src, f)
+		if (os.path.isfile(filename)):
+			shutil.copy(filename, dest_)
+
+
+##################################################
+def checkDirName(catkinDir_):
+	if (catkinDir_[len(catkinDir_) - 1] != '/'):
+		return catkinDir_ + '/'
+	else:
+		return catkinDir_
 
 
 ##################################################
 if __name__ == '__main__':
 	# check the right version of python
 	if int(sys.version[0]) != 2:
-		print('  ERROR: required Python version 2.x.x\n')
+		print('  ERROR: required Python v2 (>= 2.7.3)\n')
 
 	else:
 		try:
@@ -31,8 +89,17 @@ if __name__ == '__main__':
 				print('   Usage: python run.py <catkin_workspace_location> <worlds_list_file>')
 				sys.exit(0)
 
-			catkinDir = sys.argv[1]
-			worldsFile = sys.argv[2]
+			catkinDir = checkDirName(sys.argv[1])
+			worldsList = sys.argv[2]
+			packageDir = getPackageDir()
+
+			print('Cleaning output directory...')
+			cleanOutputDir(packageDir)
+			resultsDestination = getExpDestination()
+
+			copyResults(packageDir + OUTPUT_DIR, resultsDestination)
+			sys.exit(0)
+
 
 			# set the port to listen the experiment monitor node
 			sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -42,7 +109,7 @@ if __name__ == '__main__':
 			print('*** Beginning learning experiments ***')
 
 			# run a experiment with each world
-			with open(worldsFile) as worlds:
+			with open(worldsList) as worlds:
 				for world in worlds:
 					world = world.replace('\n', '')
 					print('\t ==> evaluating world "' + world + '"')
@@ -58,7 +125,7 @@ if __name__ == '__main__':
 					# little sleep to allow roscore to come up
 					time.sleep(10)
 
-
+					# start monitoring the experiments
 					print('\t...launching monitor node')
 					monitorProcess = subprocess.Popen(CMD_MON + IP + ' ' + str(PORT), cwd='.', shell=True, stderr=subprocess.STDOUT)
 
