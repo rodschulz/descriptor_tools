@@ -9,9 +9,11 @@ import shutil
 import yaml
 import datetime
 
-appLocation = 'build/DenseEvaluator'
-configLocation = 'config/config_dense_evaluator.yaml'
-resultsLocation = './results/' 
+
+APP_LOCATION = 'build/DenseEvaluator'
+CONFIG_LOCATION = 'config/config_dense_evaluator.yaml'
+RESULTS_LOCATION = './results/' 
+
 
 ##################################################
 def getClusterNumber(fileName):
@@ -24,10 +26,11 @@ def getClusterNumber(fileName):
 		print('Error reading ' + fileName + ': ' + str(e) + ')')
 		raise(IOError('Cant get configured clusters number'))
 
+
 ##################################################
 def getDestination(nclusters):
 	# create results directory if it doesnt exists
-	os.makedirs(resultsLocation, exist_ok=True)
+	os.makedirs(RESULTS_LOCATION, exist_ok=True)
 
 	# check the destination directory
 	experiment = 1
@@ -36,7 +39,7 @@ def getDestination(nclusters):
 
 		# check if the experiment number is already used
 		change = False
-		for f in os.listdir(resultsLocation):
+		for f in os.listdir(RESULTS_LOCATION):
 			if destination in f:
 				experiment = experiment + 1
 				change = True
@@ -46,7 +49,8 @@ def getDestination(nclusters):
 		if not change:
 			break
 
-	return resultsLocation + destination + '_{:%Y-%m-%d_%H%M%S}/'.format(datetime.datetime.now())
+	return RESULTS_LOCATION + destination + '_{:%Y-%m-%d_%H%M%S}/'.format(datetime.datetime.now())
+
 
 ##################################################
 def moveOutputData(appDirectory, destination, inputLine):
@@ -61,6 +65,7 @@ def moveOutputData(appDirectory, destination, inputLine):
 	shutil.rmtree(source)
 	os.mkdir(source)
 
+
 ##################################################
 def main():
 	try:
@@ -72,7 +77,7 @@ def main():
 		# get the application's directory
 		appDirectory = os.path.abspath(sys.argv[1]) + '/'
 		# get number of clusters to be used in the reduction process
-		nclusters = getClusterNumber(appDirectory + configLocation)
+		nclusters = getClusterNumber(appDirectory + CONFIG_LOCATION)
 		# get destination directory
 		destination = getDestination(nclusters)
 
@@ -88,8 +93,8 @@ def main():
 
 				print('Processing file: ' + line)
 				
-				# run the appLocation and wait
-				cmd = appDirectory + appLocation + ' ' + line + ' | tee DenseEvaluator.log; mv DenseEvaluator.log output/' 
+				# run the app and wait
+				cmd = appDirectory + APP_LOCATION + ' ' + line + ' | tee DenseEvaluator.log; mv DenseEvaluator.log output/' 
 				process = subprocess.Popen(cmd, cwd=appDirectory, shell=True, stdout=FNULL, stderr=subprocess.STDOUT)
 				process.wait()
 
@@ -101,6 +106,7 @@ def main():
 
 	except IOError as e:
 		print('ERROR: ' + str(e))
+
 
 ##################################################
 if __name__ == '__main__':
