@@ -20,12 +20,17 @@ def experimentDone(msg_):
 		sock.send('experiment done')
 		sock.close()
 
-		rospy.signal_shutdown('Finishing experiment')
+		rospy.signal_shutdown('Experiment finished')
 
 
 ##################################################
 if __name__ == '__main__':
 	try:
+		if (len(sys.argv) < 3):
+			print('NOT ENOUGH ARGUMENTS GIVEN.\n')
+			print('   Usage: python experiment_monitor_node.py <ip> <port>')
+			sys.exit(0)
+
 		IP = sys.argv[1]
 		PORT = int(sys.argv[2])
 
