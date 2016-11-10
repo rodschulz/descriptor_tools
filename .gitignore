@@ -1,3 +1,4 @@
+*.~lock*
 clusters*
 proj/*
 FileCrawler/crawled_files

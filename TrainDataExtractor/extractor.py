@@ -6,11 +6,12 @@ import yaml
 import os
 import sys
 import csv
+from collections import OrderedDict
 
 
 ##################################################
 def getFields():
-	fields = {}
+	fields = OrderedDict()
 
 	fields['object'] = ['target_object']
 	fields['completed'] = ['result', 'attempt_completed']
