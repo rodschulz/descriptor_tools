@@ -5,3 +5,4 @@ DenseEvaluatorRunner/results/*
 DenseEvaluatorRunner/cloud_set*
 LearningExperimentRunner/results/*
 LearningExperimentRunner/world_set*
+TrainDataExtractor/*.csv
