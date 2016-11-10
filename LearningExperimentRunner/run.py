@@ -15,6 +15,7 @@ import socket
 IP = '127.0.0.1'
 PORT = 5008
 CMD_EXP = 'exec roslaunch pr2_grasping all.launch world:='
+CMD_RVIZ = 'rviz:=true'
 CMD_MON = 'exec python ./experiment_monitor_node.py '
 OUTPUT_DIR = 'output/'
 RESULTS_DIR = 'results/' 
@@ -88,13 +89,14 @@ if __name__ == '__main__':
 	else:
 		try:
 			# check if enough args were given
-			if (len(sys.argv) < 3):
+			if (len(sys.argv) < 4):
 				print('NOT ENOUGH ARGUMENTS GIVEN.\n')
-				print('   Usage: python run.py <catkin_workspace_location> <worlds_list_file>')
+				print('   Usage: python run.py <catkin_workspace_location> <worlds_list_file> <show_rviz_true/false>')
 				sys.exit(0)
 
 			catkinDir = checkDirName(sys.argv[1])
 			worldsList = sys.argv[2]
+			rviz = sys.argv[3].lower() == 'true'
 			packageDir = getPackageDir()
 
 			print('Cleaning output directory...')
@@ -118,7 +120,10 @@ if __name__ == '__main__':
 
 					print('\t...launching ROS\n')
 					print('========================================')
-					experimentProcess = subprocess.Popen(CMD_EXP + world, cwd=catkinDir, shell=True, stderr=subprocess.STDOUT)
+					cmd = CMD_EXP + world
+					if (rviz):
+						cmd = cmd + ' ' + CMD_RVIZ
+					experimentProcess = subprocess.Popen(cmd, cwd=catkinDir, shell=True, stderr=subprocess.STDOUT)
 					print('********** pid: ' + str(experimentProcess.pid) + ' **********')
 					print('========================================\n')
 
