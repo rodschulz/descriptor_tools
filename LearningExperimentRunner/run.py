@@ -10,15 +10,18 @@ import time
 import datetime
 import signal
 import socket
+import definitions as defs
 
 
 IP = '127.0.0.1'
 PORT = 5008
+NSETS = 2
+
 CMD_EXP = 'exec roslaunch pr2_grasping all.launch world:='
-CMD_RVIZ = 'rviz:=true'
+CMD_UI = 'rviz:=true gui:=true'
 CMD_MON = 'exec python ./experiment_monitor_node.py '
 OUTPUT_DIR = 'output/'
-RESULTS_DIR = 'results/' 
+RESULTS_DIR = 'results/'
 
 
 ##################################################
@@ -91,7 +94,7 @@ if __name__ == '__main__':
 			# check if enough args were given
 			if (len(sys.argv) < 4):
 				print('NOT ENOUGH ARGUMENTS GIVEN.\n')
-				print('   Usage: python run.py <catkin_workspace_location> <worlds_list_file> <show_rviz_true/false>')
+				print('   Usage: python run.py <catkin_workspace> <worlds_list_file> <show_ui>')
 				sys.exit(0)
 
 			catkinDir = checkDirName(sys.argv[1])
@@ -118,42 +121,52 @@ if __name__ == '__main__':
 					print('\t ==> evaluating world "' + world + '"')
 
 
-					print('\t...launching ROS\n')
-					print('========================================')
-					cmd = CMD_EXP + world
-					if (rviz):
-						cmd = cmd + ' ' + CMD_RVIZ
-					experimentProcess = subprocess.Popen(cmd, cwd=catkinDir, shell=True, stderr=subprocess.STDOUT)
-					print('********** pid: ' + str(experimentProcess.pid) + ' **********')
-					print('========================================\n')
+					for retry in range(5):
+						print('\t...launching ROS\n')
+						print('========================================')
+						cmd = CMD_EXP + world
+						if (rviz):
+							cmd = cmd + ' ' + CMD_UI
+						experimentProcess = subprocess.Popen(cmd, cwd=catkinDir, shell=True, stderr=subprocess.STDOUT)
+						print('********** pid: ' + str(experimentProcess.pid) + ' **********')
+						print('========================================\n')
 
 
-					# little sleep to allow roscore to come up
-					time.sleep(10)
+						# little sleep to allow roscore to come up
+						time.sleep(10)
 
-					# start monitoring the experiments
-					print('\t...launching monitor node')
-					monitorProcess = subprocess.Popen(CMD_MON + IP + ' ' + str(PORT), cwd='.', shell=True, stderr=subprocess.STDOUT)
+						# start monitoring the experiments
+						print('\t...launching monitor node')
+						monitorProcess = subprocess.Popen(CMD_MON + IP + ' ' + str(PORT) + ' ' + str(NSETS), cwd='.', shell=True, stderr=subprocess.STDOUT)
 
-					# wait for the monitor node to speak
-					connection, addr = sock.accept()
-					while True:
-						data = connection.recv(128)
-						break
-
-					# kill the experiment once the monitor has talked
-					print('...sending SIGINT to process')
-					experimentProcess.send_signal(signal.SIGINT)
-					print('...signal sent')
-					time.sleep(5)
+						# wait for the monitor node to speak
+						data = None
+						connection, addr = sock.accept()
+						while True:
+							data = connection.recv(128)
+							print('RX: ' + data)
+							break
 
 
-					# monitor the running process
-					while experimentProcess.poll() is None:
-						time.sleep(2)
+						# kill the experiment once the monitor has talked
+						print('...sending SIGINT to process')
+						experimentProcess.send_signal(signal.SIGINT)
+						print('...signal sent')
+						time.sleep(5)
 
-					# copy experiment results
-					copyResults(packageDir + OUTPUT_DIR, resultsDest)
+
+						# monitor the running process
+						while experimentProcess.poll() is None:
+							time.sleep(2)
+
+						# copy experiment results
+						copyResults(packageDir + OUTPUT_DIR, resultsDest)
+
+
+						if data == defs.EXP_DONE:
+							break;
+						else:
+							print('\t...experiment failed, retrying')
 
 
 					print('\t...world "' + world + '" done')

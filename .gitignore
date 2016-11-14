@@ -1,4 +1,5 @@
 *.~lock*
+*.pyc
 clusters*
 proj/*
 FileCrawler/crawled_files
