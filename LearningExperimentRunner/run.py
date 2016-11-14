@@ -36,6 +36,8 @@ def cleanOutputDir(pkgDir_):
 	shutil.rmtree(outputDir)
 	os.mkdir(outputDir)
 
+	shutil.rmtree(defs.MONITOR_OUTPUT)
+	os.mkdir(defs.MONITOR_OUTPUT)
 
 ##################################################
 def getExpDestination():

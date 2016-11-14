@@ -37,7 +37,7 @@ def setsCallback(msg_):
 
 		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		sock.connect((IP, PORT))
-		sock.send(defs.EXP_DONE)
+		sock.send(str(defs.EXP_DONE))
 		sock.close()
 
 		rospy.signal_shutdown('Experiment finished')
