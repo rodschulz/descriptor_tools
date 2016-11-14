@@ -15,7 +15,7 @@ import definitions as defs
 
 IP = '127.0.0.1'
 PORT = 5008
-NSETS = 2
+NSETS = 1
 
 CMD_EXP = 'exec roslaunch pr2_grasping all.launch world:='
 CMD_UI = 'rviz:=true gui:=true'
@@ -59,7 +59,7 @@ def getExpDestination():
 		if not change:
 			break
 
-	return RESULTS_DIR + destination + '_{:%Y-%m-%d_%H%M%S}/'.format(datetime.datetime.now())
+	return (RESULTS_DIR + destination + '_' + defs.STAMP_FORMAT + '/').format(datetime.datetime.now())
 
 
 ##################################################
@@ -71,6 +71,12 @@ def copyResults(src_, dest_):
 	files = os.listdir(src_)
 	for f in files:
 		filename = os.path.join(src_, f)
+		if (os.path.isfile(filename)):
+			shutil.move(filename, dest_)
+
+	files = os.listdir(defs.MONITOR_OUTPUT)
+	for f in files:
+		filename = os.path.join(defs.MONITOR_OUTPUT, f)
 		if (os.path.isfile(filename)):
 			shutil.move(filename, dest_)
 
@@ -137,7 +143,7 @@ if __name__ == '__main__':
 
 						# start monitoring the experiments
 						print('\t...launching monitor node')
-						monitorProcess = subprocess.Popen(CMD_MON + IP + ' ' + str(PORT) + ' ' + str(NSETS), cwd='.', shell=True, stderr=subprocess.STDOUT)
+						monitorProcess = subprocess.Popen(CMD_MON + IP + ' ' + str(PORT) + ' ' + str(NSETS) + ' ' + world, cwd='.', shell=True, stderr=subprocess.STDOUT)
 
 						# wait for the monitor node to speak
 						data = None

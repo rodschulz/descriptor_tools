@@ -5,6 +5,7 @@ proj/*
 FileCrawler/crawled_files
 DenseEvaluatorRunner/results/*
 DenseEvaluatorRunner/cloud_set*
+LearningExperimentRunner/nodeOutput/*
 LearningExperimentRunner/results/*
 LearningExperimentRunner/world_set*
 TrainDataExtractor/*.csv
