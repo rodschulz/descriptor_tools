@@ -20,7 +20,7 @@ NSETS = 1
 
 CMD_EXP = ['gnome-terminal', '-x', 'roslaunch', 'pr2_grasping', 'all.launch']
 CMD_UI = ['rviz:=true', 'gui:=true']
-CMD_MON = 'exec python ./experiment_monitor_node.py '
+CMD_MON = 'exec python ./src/experiment_monitor_node.py '
 ROS_APP_OUTPUT_DIR = 'output/'
 EXP_RESULTS_DIR = 'results/'
 
@@ -115,8 +115,8 @@ if __name__ == '__main__':
 		try:
 			# check if enough args were given
 			if (len(sys.argv) < 4):
-				logger.info('NOT ENOUGH ARGUMENTS GIVEN.\n')
-				logger.info('   Usage: python run.py <catkin_workspace> <worlds_list_file> <show_ui>')
+				print('\nNOT ENOUGH ARGUMENTS GIVEN.')
+				print('   Usage: python run.py <catkin_workspace> <worlds_list_file> <show_ui>\n')
 				sys.exit(0)
 
 			catkinDir = checkDirName(sys.argv[1])
@@ -140,23 +140,23 @@ if __name__ == '__main__':
 			with open(worldsList) as worlds:
 				for world in worlds:
 					world = world.replace('\n', '')
-					logger.info('\t ==> evaluating world "' + world + '"')
+					logger.info('========================================')
+					logger.info('Evaluating world "' + world + '"')
 
 
-					for retry in range(5):
+					for k in range(1):
+
 						# clear the log folder before every experiment
 						loggingPath = os.path.expanduser('~/.ros/log/')
 						if os.path.exists(loggingPath):
 							shutil.rmtree(loggingPath)
 
 						logger.info('...launching ROS')
-						logger.info('========================================')
 						cmd = CMD_EXP + ['world:=' + world]
 						if (rviz):
 							cmd = cmd + CMD_UI
 						expProcess = subprocess.Popen(cmd, cwd=catkinDir, stderr=subprocess.STDOUT)
 						logger.info('********** pid: ' + str(expProcess.pid) + ' **********')
-						logger.info('========================================')
 
 						# little sleep to allow roscore to come up
 						time.sleep(10)
@@ -176,7 +176,8 @@ if __name__ == '__main__':
 
 						# kill the experiment once the monitor has talked
 						logger.info('...sending SIGINT to process')
-						expProcess.send_signal(signal.SIGINT)
+						# expProcess.send_signal(signal.SIGINT)
+						expProcess.send_signal(signal.SIGTERM)
 						logger.info('...signal sent')
 						time.sleep(5)
 
@@ -190,13 +191,13 @@ if __name__ == '__main__':
 						if data == str(defs.EXP_DONE):
 							break;
 						else:
-							logger.info('\t...experiment failed, retrying')
+							logger.info('\t...experiment failed (attempt %d)', k)
 
 
 					logger.info('\t...world "' + world + '" done')
 					logger.info('\t...waiting for system to be ready')
-					logger.info('')
-					time.sleep(3)
+					time.sleep(30)
+					logger.info('========================================')
 
 			connection.close()
 			shutil.move(logFilename, resultsDest)

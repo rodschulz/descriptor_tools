@@ -15,12 +15,18 @@ from sensor_msgs.msg import PointCloud2
 from pr2_grasping.msg import EvaluationStatus
 from moveit_msgs.msg import PickupActionGoal
 
-
+##################################################
+# Config params
 SCREENSHOT_BEFORE = True
-SCREENSHOT_EVAL = False
+SCREENSHOT_EVAL = True
 SCREENSHOT_AFTER = False
 
+SCREENSHOT_GAZEBO = True
+SCREENSHOT_RVIZ = False
+
 DEBUG = False
+##################################################
+
 
 IP = '127.0.0.1'
 PORT = 9999
@@ -29,6 +35,7 @@ NSETS = 5
 world = ''
 evalTime = None
 evalIdx = 0
+evalMaxIdx = 1
 
 experimentStarted = False
 cloudLabeled = False
@@ -71,7 +78,7 @@ def evalCallback(msg_):
 	elif msg_.status == EvaluationStatus.PERFORMING_NEW_EVAL:
 		sufix = '_EVAL_' + str(evalIdx)
 		evalIdx = evalIdx + 1
-		if not SCREENSHOT_EVAL:
+		if not SCREENSHOT_EVAL or evalIdx > evalMaxIdx:
 			return
 
 	elif msg_.status == EvaluationStatus.AFTER_EVAL:
@@ -92,9 +99,9 @@ def evalCallback(msg_):
 
 	os.system('mkdir -p ' + defs.MONITOR_OUTPUT)
 	for w in windows:
-		if pattern1.match(w.get_name()):
+		if pattern1.match(w.get_name()) and SCREENSHOT_GAZEBO:
 			os.system('import -window "' + w.get_name() + '" ' + defs.MONITOR_OUTPUT + prefix + '_gazebo' + sufix +'.jpg')
-		elif pattern2.match(w.get_name()):
+		elif pattern2.match(w.get_name()) and SCREENSHOT_RVIZ:
 			os.system('import -window "' + w.get_name() + '" ' + defs.MONITOR_OUTPUT + prefix + '_rviz' + sufix +'.jpg')
 
 
