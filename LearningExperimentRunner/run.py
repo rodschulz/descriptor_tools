@@ -11,17 +11,18 @@ import datetime
 import signal
 import socket
 import definitions as defs
+import logging
 
 
 IP = '127.0.0.1'
 PORT = 5008
 NSETS = 1
 
-CMD_EXP = 'exec roslaunch pr2_grasping all.launch world:='
-CMD_UI = 'rviz:=true gui:=true'
+CMD_EXP = ['gnome-terminal', '-x', 'roslaunch', 'pr2_grasping', 'all.launch']
+CMD_UI = ['rviz:=true', 'gui:=true']
 CMD_MON = 'exec python ./experiment_monitor_node.py '
-OUTPUT_DIR = 'output/'
-RESULTS_DIR = 'results/'
+ROS_APP_OUTPUT_DIR = 'output/'
+EXP_RESULTS_DIR = 'results/'
 
 
 ##################################################
@@ -32,7 +33,7 @@ def getPackageDir():
 
 ##################################################
 def cleanOutputDir(pkgDir_):
-	outputDir = pkgDir_ + OUTPUT_DIR
+	outputDir = pkgDir_ + ROS_APP_OUTPUT_DIR
 	shutil.rmtree(outputDir)
 	os.mkdir(outputDir)
 
@@ -43,7 +44,7 @@ def cleanOutputDir(pkgDir_):
 ##################################################
 def getExpDestination():
 	# create results directory
-	subprocess.call(['mkdir','-p', RESULTS_DIR])
+	subprocess.call(['mkdir','-p', EXP_RESULTS_DIR])
 
 	# check the destination directory
 	experiment = 1
@@ -52,7 +53,7 @@ def getExpDestination():
 
 		# check if the experiment number is already used
 		change = False
-		for f in os.listdir(RESULTS_DIR):
+		for f in os.listdir(EXP_RESULTS_DIR):
 			if destination in f:
 				experiment = experiment + 1
 				change = True
@@ -62,7 +63,7 @@ def getExpDestination():
 		if not change:
 			break
 
-	return (RESULTS_DIR + destination + '_' + defs.STAMP_FORMAT + '/').format(datetime.datetime.now())
+	return (EXP_RESULTS_DIR + destination + '_' + defs.STAMP_FORMAT + '/').format(datetime.datetime.now())
 
 
 ##################################################
@@ -94,16 +95,27 @@ def checkDirName(catkinDir_):
 
 ##################################################
 if __name__ == '__main__':
+	formatter = logging.Formatter('[%(asctime)s][%(name)s][%(levelname)s] %(message)s', "%Y-%m-%d %H:%M:%S")
+	logger = logging.getLogger('RUNNER')
+	logger.setLevel(logging.DEBUG)
+	fh = logging.FileHandler(EXP_RESULTS_DIR + 'runner.log', 'w')
+	ch = logging.StreamHandler()
+	fh.setFormatter(formatter)
+	ch.setFormatter(formatter)
+	logger.addHandler(fh)
+	logger.addHandler(ch)
+
+
 	# check the right version of python
 	if int(sys.version[0]) != 2:
-		print('  ERROR: required Python v2 (>= 2.7.3)\n')
+		logger.info('  ERROR: required Python v2 (>= 2.7.3)\n')
 
 	else:
 		try:
 			# check if enough args were given
 			if (len(sys.argv) < 4):
-				print('NOT ENOUGH ARGUMENTS GIVEN.\n')
-				print('   Usage: python run.py <catkin_workspace> <worlds_list_file> <show_ui>')
+				logger.info('NOT ENOUGH ARGUMENTS GIVEN.\n')
+				logger.info('   Usage: python run.py <catkin_workspace> <worlds_list_file> <show_ui>')
 				sys.exit(0)
 
 			catkinDir = checkDirName(sys.argv[1])
@@ -111,7 +123,7 @@ if __name__ == '__main__':
 			rviz = sys.argv[3].lower() == 'true'
 			packageDir = getPackageDir()
 
-			print('Cleaning output directory...')
+			logger.info('Cleaning output directory...')
 			cleanOutputDir(packageDir)
 			resultsDest = getExpDestination()
 
@@ -121,34 +133,35 @@ if __name__ == '__main__':
 			sock.bind((IP, PORT))
 			sock.listen(1)
 
-			print('*** Beginning learning experiments ***')
+			logger.info('*** Beginning learning experiments ***')
 
 			# run a experiment with each world
 			with open(worldsList) as worlds:
 				for world in worlds:
 					world = world.replace('\n', '')
-					print('\t ==> evaluating world "' + world + '"')
+					logger.info('\t ==> evaluating world "' + world + '"')
 
 
 					for retry in range(5):
 						# clear the log folder before every experiment
-						shutil.rmtree(os.path.expanduser('~/.ros/log/'))
+						loggingPath = os.path.expanduser('~/.ros/log/')
+						if os.path.exists(loggingPath):
+							shutil.rmtree(loggingPath)
 
-						print('\t...launching ROS\n')
-						print('========================================')
-						cmd = CMD_EXP + world
+						logger.info('...launching ROS')
+						logger.info('========================================')
+						cmd = CMD_EXP + ['world:=' + world]
 						if (rviz):
-							cmd = cmd + ' ' + CMD_UI
-						experimentProcess = subprocess.Popen(cmd, cwd=catkinDir, shell=True, stderr=subprocess.STDOUT)
-						print('********** pid: ' + str(experimentProcess.pid) + ' **********')
-						print('========================================\n')
-
+							cmd = cmd + CMD_UI
+						expProcess = subprocess.Popen(cmd, cwd=catkinDir, stderr=subprocess.STDOUT)
+						logger.info('********** pid: ' + str(expProcess.pid) + ' **********')
+						logger.info('========================================')
 
 						# little sleep to allow roscore to come up
 						time.sleep(10)
 
 						# start monitoring the experiments
-						print('\t...launching monitor node')
+						logger.info('...launching monitor node')
 						monitorProcess = subprocess.Popen(CMD_MON + IP + ' ' + str(PORT) + ' ' + str(NSETS) + ' ' + world, cwd='.', shell=True, stderr=subprocess.STDOUT)
 
 						# wait for the monitor node to speak
@@ -156,39 +169,40 @@ if __name__ == '__main__':
 						connection, addr = sock.accept()
 						while True:
 							data = connection.recv(128)
-							print('RX: ' + data)
+							logger.info('...rx data: ' + data)
 							break
 
 
 						# kill the experiment once the monitor has talked
-						print('...sending SIGINT to process')
-						experimentProcess.send_signal(signal.SIGINT)
-						print('...signal sent')
+						logger.info('...sending SIGINT to process')
+						expProcess.send_signal(signal.SIGINT)
+						logger.info('...signal sent')
 						time.sleep(5)
 
 
 						# monitor the running process
-						while experimentProcess.poll() is None:
+						while expProcess.poll() is None:
 							time.sleep(2)
 
 						# copy experiment results
-						copyResults(packageDir + OUTPUT_DIR, resultsDest)
+						copyResults(packageDir + ROS_APP_OUTPUT_DIR, resultsDest)
 
 
 						if data == str(defs.EXP_DONE):
 							break;
 						else:
-							print('\t...experiment failed, retrying')
+							logger.info('\t...experiment failed, retrying')
 
 
-					print('\t...world "' + world + '" done')
-					print('\t...waiting for system to be ready\n')
+					logger.info('\t...world "' + world + '" done')
+					logger.info('\t...waiting for system to be ready')
+					logger.info('')
 					time.sleep(3)
 
 
 			connection.close()
-			print('*** Learning experiments execution finished ***')
+			logger.info('*** Learning experiments execution finished ***')
 
 
 		except IOError as e:
-			print('ERROR: ' + str(e))
+			logger.info('ERROR: ' + str(e))
