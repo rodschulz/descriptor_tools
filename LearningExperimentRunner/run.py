@@ -39,6 +39,7 @@ def cleanOutputDir(pkgDir_):
 	shutil.rmtree(defs.MONITOR_OUTPUT)
 	os.mkdir(defs.MONITOR_OUTPUT)
 
+
 ##################################################
 def getExpDestination():
 	# create results directory
@@ -130,6 +131,9 @@ if __name__ == '__main__':
 
 
 					for retry in range(5):
+						# clear the log folder before every experiment
+						shutil.rmtree(os.path.expanduser('~/.ros/log/'))
+
 						print('\t...launching ROS\n')
 						print('========================================')
 						cmd = CMD_EXP + world
@@ -171,7 +175,7 @@ if __name__ == '__main__':
 						copyResults(packageDir + OUTPUT_DIR, resultsDest)
 
 
-						if data == defs.EXP_DONE:
+						if data == str(defs.EXP_DONE):
 							break;
 						else:
 							print('\t...experiment failed, retrying')
