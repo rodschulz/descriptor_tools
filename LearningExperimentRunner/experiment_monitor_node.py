@@ -13,34 +13,45 @@ import definitions as defs
 from std_msgs.msg import Int32
 from sensor_msgs.msg import PointCloud2
 from pr2_grasping.msg import EvaluationStatus
+from moveit_msgs.msg import PickupActionGoal
 
 
 SCREENSHOT_BEFORE = True
 SCREENSHOT_EVAL = False
 SCREENSHOT_AFTER = False
 
+DEBUG = False
 
 IP = '127.0.0.1'
 PORT = 9999
 NSETS = 5
 
 world = ''
-experimentRunning = False
 evalTime = None
 evalIdx = 0
+
+experimentStarted = False
+cloudLabeled = False
+graspingAttempt = False
+
+
+##################################################
+def sendSocketMsg(msg_, shutdownMsg_):
+	rospy.loginfo('[MONITOR]...sending msg: ' + msg_)
+
+	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	sock.connect((IP, PORT))
+	sock.send(str(msg_))
+	sock.close()
+
+	rospy.signal_shutdown(shutdownMsg_)
 
 
 ##################################################
 def setsCallback(msg_):
 	if msg_.data >= NSETS:
-		rospy.loginfo('Experiment done (%d)', msg_.data)
-
-		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		sock.connect((IP, PORT))
-		sock.send(str(defs.EXP_DONE))
-		sock.close()
-
-		rospy.signal_shutdown('Experiment finished')
+		rospy.loginfo('[MONITOR]...experiment done (%d)', msg_.data)
+		sendSocketMsg(str(defs.EXP_DONE), 'Experiment finished')
 
 
 ##################################################
@@ -89,19 +100,44 @@ def evalCallback(msg_):
 
 ##################################################
 def cloudCallback(msg_):
-	global experimentRunning
-	experimentRunning = True
+	global experimentStarted, cloudLabeled
+	rospy.logdebug('[MONITOR]...labeled cloud received')
+	experimentStarted = True
+	cloudLabeled = True
 
 
 ##################################################
-def watchdogCallback(event_):
-	if not experimentRunning:
-		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		sock.connect((IP, PORT))
-		sock.send(str(defs.EXP_START_FAILED))
-		sock.close()
+def graspingCallback(msg_):
+	global graspingAttempt
+	rospy.logdebug('[MONITOR]...pickup goal received')
+	graspingAttempt = True
 
-		rospy.signal_shutdown('Experiment start failed')
+
+##################################################
+def watchdogStart(event_):
+	rospy.logdebug('[MONITOR]...start timer')
+	if not experimentStarted:
+		sendSocketMsg(str(defs.EXP_START_FAILED), 'Experiment start failed')
+
+
+##################################################
+def watchdogLabeling(event_):
+	global cloudLabeled
+	rospy.logdebug('[MONITOR]...labeling timer')
+	if not cloudLabeled:
+		sendSocketMsg(str(defs.EXP_HANGED), 'Timeout cloud labeling')
+	else:
+		cloudLabeled = False
+
+
+##################################################
+def watchdogGrasping(event_):
+	global graspingAttempt
+	rospy.logdebug('[MONITOR]...grasping timer')
+	if not graspingAttempt:
+		sendSocketMsg(str(defs.EXP_HANGED), 'Timeout grasping attempt')
+	else:
+		graspingAttempt = False
 
 
 ##################################################
@@ -117,15 +153,23 @@ if __name__ == '__main__':
 		NSETS = int(sys.argv[3])
 		world = sys.argv[4]
 
-		rospy.init_node('experiment_monitor', anonymous=False)
+
+		logLevel = rospy.INFO
+		if DEBUG:
+			logLevel = rospy.DEBUG
+		rospy.init_node('experiment_monitor', anonymous=False, log_level=logLevel)
+
 
 		# set a watchdog for faulty starts
-		rospy.Timer(rospy.Duration(120), watchdogCallback, oneshot=True)
+		rospy.Timer(rospy.Duration(120), watchdogStart, oneshot=True)
+		rospy.Timer(rospy.Duration(1200), watchdogLabeling, oneshot=False)
+		rospy.Timer(rospy.Duration(600), watchdogGrasping, oneshot=False)
 
-		startTime = rospy.get_rostime()
+
 		rospy.Subscriber('/pr2_grasping/processed_sets', Int32, setsCallback)
 		rospy.Subscriber('/pr2_grasping/evaluation_status', EvaluationStatus, evalCallback)
 		rospy.Subscriber('/pr2_grasping/labeled_cloud', PointCloud2, cloudCallback)
+		rospy.Subscriber('/pickup/goal', PickupActionGoal, graspingCallback)
 
 		rospy.spin()
 
