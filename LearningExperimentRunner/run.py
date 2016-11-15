@@ -98,7 +98,8 @@ if __name__ == '__main__':
 	formatter = logging.Formatter('[%(asctime)s][%(name)s][%(levelname)s] %(message)s', "%Y-%m-%d %H:%M:%S")
 	logger = logging.getLogger('RUNNER')
 	logger.setLevel(logging.DEBUG)
-	fh = logging.FileHandler(EXP_RESULTS_DIR + 'runner.log', 'w')
+	logFilename = EXP_RESULTS_DIR + 'runner.log'
+	fh = logging.FileHandler(logFilename, 'w')
 	ch = logging.StreamHandler()
 	fh.setFormatter(formatter)
 	ch.setFormatter(formatter)
@@ -173,13 +174,11 @@ if __name__ == '__main__':
 							logger.info('...rx data: ' + data)
 							break
 
-
 						# kill the experiment once the monitor has talked
 						logger.info('...sending SIGINT to process')
 						expProcess.send_signal(signal.SIGINT)
 						logger.info('...signal sent')
 						time.sleep(5)
-
 
 						# monitor the running process
 						while expProcess.poll() is None:
@@ -187,7 +186,6 @@ if __name__ == '__main__':
 
 						# copy experiment results
 						copyResults(packageDir + ROS_APP_OUTPUT_DIR, resultsDest)
-
 
 						if data == str(defs.EXP_DONE):
 							break;
@@ -200,10 +198,9 @@ if __name__ == '__main__':
 					logger.info('')
 					time.sleep(3)
 
-
 			connection.close()
+			shutil.move(logFilename, resultsDest)
 			logger.info('*** Learning experiments execution finished ***')
-
 
 		except IOError as e:
 			logger.info('ERROR: ' + str(e))
