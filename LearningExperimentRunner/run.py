@@ -165,6 +165,7 @@ if __name__ == '__main__':
 						monitorProcess = subprocess.Popen(CMD_MON + IP + ' ' + str(PORT) + ' ' + str(NSETS) + ' ' + world, cwd='.', shell=True, stderr=subprocess.STDOUT)
 
 						# wait for the monitor node to speak
+						logger.info('...waiting monitor reply')
 						data = None
 						connection, addr = sock.accept()
 						while True:
