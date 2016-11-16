@@ -10,3 +10,4 @@ LearningExperimentRunner/nodeOutput/*
 LearningExperimentRunner/results/*
 LearningExperimentRunner/world_set*
 TrainDataExtractor/*.csv
+TrainDataExtractor/*.yaml

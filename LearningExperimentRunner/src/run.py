@@ -14,6 +14,8 @@ import definitions as defs
 import logging
 
 
+##################################################
+############ CONSTANTS, DO NOT MODIFY ############
 IP = '127.0.0.1'
 PORT = 5008
 NSETS = 1

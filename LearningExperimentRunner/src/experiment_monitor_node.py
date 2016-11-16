@@ -15,8 +15,9 @@ from sensor_msgs.msg import PointCloud2
 from pr2_grasping.msg import EvaluationStatus
 from moveit_msgs.msg import PickupActionGoal
 
+
 ##################################################
-# Config params
+################# NODE'S CONFIG ##################
 SCREENSHOT_BEFORE = True
 SCREENSHOT_EVAL = True
 SCREENSHOT_AFTER = False
@@ -25,9 +26,10 @@ SCREENSHOT_GAZEBO = True
 SCREENSHOT_RVIZ = False
 
 DEBUG = False
+
+
 ##################################################
-
-
+############## EXECUTION VARIABLES ###############
 IP = '127.0.0.1'
 PORT = 9999
 NSETS = 5
@@ -154,6 +156,7 @@ if __name__ == '__main__':
 			print('NOT ENOUGH ARGUMENTS GIVEN.\n')
 			print('   Usage: python experiment_monitor_node.py <ip> <port> <nsets> <world_name>')
 			sys.exit(0)
+
 
 		IP = sys.argv[1]
 		PORT = int(sys.argv[2])
