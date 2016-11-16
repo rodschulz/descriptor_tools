@@ -14,8 +14,9 @@ from collections import OrderedDict
 
 ##################################################
 ################## APP'S CONFIG ##################
-USE_ANGLE = True
 LOG_LEVEL = logging.INFO
+USE_ANGLE = True
+USE_AUTO_TRAIN = True
 
 ##################################################
 logger = None
@@ -149,9 +150,18 @@ if __name__ == '__main__':
 
 	# train a classificator
 	logger.info('Training classificator')
-	# svmParams = dict(kernel_type = cv2.SVM_LINEAR, svm_type = cv2.SVM_C_SVC, C=2.67)
-	svmParams = dict(kernel_type = cv2.SVM_RBF, svm_type = cv2.SVM_C_SVC)
+
+	tt = numpy.array(train, dtype = numpy.float32)
+	rr = numpy.array(response, dtype = numpy.float32)
+
 	svm = cv2.SVM()
-	# svm.train(numpy.array(train, dtype = numpy.float32), numpy.array(response, dtype = numpy.float32), params=svmParams)
-	svm.train_auto(numpy.array(train, dtype = numpy.float32), numpy.array(response, dtype = numpy.float32), None, None, params=svmParams, k_fold=10)
+	svmParams = dict(kernel_type = cv2.SVM_RBF, svm_type = cv2.SVM_C_SVC, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001))
+
+	if USE_AUTO_TRAIN:
+		logger.info('...using AUTO_TRAIN')
+		svm.train_auto(tt, rr, None, None, params=svmParams, k_fold=10)
+	else:
+		svmParams['C'] = 2.78
+		svm.train(tt, rr, params=svmParams)
+
 	svm.save('svm.yaml')
