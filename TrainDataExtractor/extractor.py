@@ -16,7 +16,8 @@ from collections import OrderedDict
 ################## APP'S CONFIG ##################
 LOG_LEVEL = logging.INFO
 USE_ANGLE = True
-USE_AUTO_TRAIN = True
+USE_AUTO_TRAIN = False
+TEST_SVM_PREDICTIONS = True
 
 ##################################################
 logger = None
@@ -165,3 +166,15 @@ if __name__ == '__main__':
 		svm.train(tt, rr, params=svmParams)
 
 	svm.save('svm.yaml')
+
+	if TEST_SVM_PREDICTIONS:
+		logger.info('Testing SVM predictions')
+		nsplit = 4
+		step = numpy.pi / nsplit
+
+		numpy.set_printoptions(precision=1)
+		for label in range(7):
+			for angle in range(nsplit):
+				tmp = numpy.array([[label, angle * step]], dtype = numpy.float32)
+				res = svm.predict(tmp)
+				logger.info('...predicting (%d, %.2f): ' + str(res == 1), tmp[0][0], tmp[0][1])
