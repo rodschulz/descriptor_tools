@@ -10,6 +10,7 @@ import numpy
 import cv2
 import logging
 from collections import OrderedDict
+import matplotlib.pyplot as plt
 
 
 ##################################################
@@ -21,6 +22,15 @@ TEST_SVM_PREDICTIONS = True
 
 ##################################################
 logger = None
+nclusters = 7
+nsplit = 4
+
+
+def gaussianKernel(alpha_, y_):
+	return (numpy.exp(-0.5 * alpha_ * alpha_) / numpy.sqrt(2 * numpy.pi)) * y_
+
+def cosineKernel(alpha_, y_):
+	return (numpy.pi * numpy.cos(numpy.pi * alpha_ / 2) / 4) * y_
 
 
 ##################################################
@@ -114,6 +124,86 @@ def traverseDirectory(dir_, fields_, writer_):
 
 
 ##################################################
+def testPredictions(svm_):
+	logger.info('Testing SVM predictions')
+
+	step = numpy.pi / nsplit
+	for label in range(nclusters):
+		for angle in range(nsplit):
+			tmp = numpy.array([[label, angle * step]], dtype = numpy.float32)
+			res = svm.predict(tmp)
+			distance = svm.predict(tmp, True)
+			logger.info('...prediction (%d, %.2f): % 3.3f / %s', tmp[0][0], tmp[0][1], distance, res == 1)
+
+
+##################################################
+def calcDistribution(svm_):
+	logger.info('Testing SVM predictions')
+
+	# result = numpy.array()
+
+	step = numpy.pi / nsplit
+	angles = numpy.arange(-numpy.pi, numpy.pi, step)
+	for label in range(nclusters):
+		logger.info('...evaluating label ' + str(label))
+
+		# generate the results for the current cluster
+		results = numpy.array([])
+		for angle in angles:
+			d = numpy.array([[label, angle]], dtype = numpy.float32)
+			p = svm.predict(d)
+			results = numpy.append(results, p)
+
+		# evaluate the kernel
+		evalStep = numpy.pi / 100
+		# evalAngles = numpy.arange(0, numpy.pi, evalStep)
+		evalAngles = numpy.arange(-numpy.pi, numpy.pi, evalStep)
+
+		dist = []
+		h = 0.5
+		for alpha in evalAngles:
+			acc = 0
+			# n = nsplit + 1
+			n = nsplit
+			for j in range(n):
+				
+				
+
+				delta = (alpha - step * j)
+				
+				# logger.info('alpha: %.2f - ang: %.2f - delta: %f', alpha, step * j, delta)
+				# raw_input()
+
+				# if abs(delta) >= numpy.pi:
+				# 	delta = 0
+				# 	logger.info('changing!')
+
+				delta = delta / h
+				val = gaussianKernel(delta, results[j % nsplit])
+				# val = cosineKernel(delta, results[j % nsplit])
+				acc = acc + val
+
+			acc = acc / (n * h)
+			dist.append(acc)
+
+
+		tmpAngles = numpy.append(angles, numpy.pi)
+		tmpRes = numpy.append(results, results[0])
+
+		fig, ax1 = plt.subplots()
+		ax1.plot(evalAngles, dist, 'r--')
+		ax1.set_xlabel('Angle')
+		ax1.set_ylabel('Value')
+		ax2 = ax1.twinx()
+		ax2.plot(tmpAngles, tmpRes, 'bs')
+		ax2.set_ylabel('Prediction')
+
+		# ax1.set_xlim([0, numpy.pi])
+		# ax2.set_xlim([0, numpy.pi])
+		# plt.show()
+
+
+##################################################
 if __name__ == '__main__':
 	if (len(sys.argv) < 2):
 		print('NOT ENOUGH ARGUMENTS GIVEN.\n')
@@ -165,16 +255,12 @@ if __name__ == '__main__':
 		svmParams['C'] = 2.78
 		svm.train(tt, rr, params=svmParams)
 
+	logger.info('Saving model to disk')
 	svm.save('svm.yaml')
 
 	if TEST_SVM_PREDICTIONS:
-		logger.info('Testing SVM predictions')
-		nsplit = 4
-		step = numpy.pi / nsplit
+		testPredictions(svm)
 
-		numpy.set_printoptions(precision=1)
-		for label in range(7):
-			for angle in range(nsplit):
-				tmp = numpy.array([[label, angle * step]], dtype = numpy.float32)
-				res = svm.predict(tmp)
-				logger.info('...predicting (%d, %.2f): ' + str(res == 1), tmp[0][0], tmp[0][1])
+	calcDistribution(svm)
+
+	logger.info('Execution finished')
