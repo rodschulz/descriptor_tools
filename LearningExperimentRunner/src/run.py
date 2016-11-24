@@ -15,11 +15,15 @@ import logging
 
 
 ##################################################
-############ CONSTANTS, DO NOT MODIFY ############
-IP = '127.0.0.1'
-PORT = 5008
+################## APP'S CONFIG ##################
+LOG_LEVEL = logging.DEBUG
+PORT = 5009
 NSETS = 1
 
+
+##################################################
+############ CONSTANTS, DO NOT MODIFY ############
+IP = '127.0.0.1'
 CMD_EXP = ['gnome-terminal', '-x', 'roslaunch', 'pr2_grasping', 'all.launch']
 CMD_UI = ['rviz:=true', 'gui:=true']
 CMD_MON = 'exec python ./src/experiment_monitor_node.py '
@@ -99,7 +103,7 @@ def checkDirName(catkinDir_):
 if __name__ == '__main__':
 	formatter = logging.Formatter('[%(asctime)s][%(name)s][%(levelname)s] %(message)s', "%Y-%m-%d %H:%M:%S")
 	logger = logging.getLogger('RUNNER')
-	logger.setLevel(logging.DEBUG)
+	logger.setLevel(LOG_LEVEL)
 	logFilename = EXP_RESULTS_DIR + 'runner.log'
 	fh = logging.FileHandler(logFilename, 'w')
 	ch = logging.StreamHandler()
@@ -142,6 +146,13 @@ if __name__ == '__main__':
 			with open(worldsList) as worlds:
 				for world in worlds:
 					world = world.replace('\n', '')
+					logger.debug('...read line "' + world + '"')
+
+					# ignore commented lines
+					if len(world) == 0 or world[0] == '#':
+						continue
+
+					world = world.split('#')[0].replace(' ', '')
 					logger.info('========================================')
 					logger.info('Evaluating world "' + world + '"')
 
@@ -165,7 +176,8 @@ if __name__ == '__main__':
 
 						# start monitoring the experiments
 						logger.info('...launching monitor node')
-						monitorProcess = subprocess.Popen(CMD_MON + IP + ' ' + str(PORT) + ' ' + str(NSETS) + ' ' + world, cwd='.', shell=True, stderr=subprocess.STDOUT)
+						cmd = CMD_MON + IP + ' ' + str(PORT) + ' ' + str(NSETS) + ' ' + world
+						monitorProcess = subprocess.Popen(cmd, cwd='.', shell=True, stderr=subprocess.STDOUT)
 
 						# wait for the monitor node to speak
 						logger.info('...waiting monitor reply')
@@ -175,9 +187,10 @@ if __name__ == '__main__':
 							data = connection.recv(128)
 							logger.info('...rx data: ' + data)
 							break
+						connection.close()
 
 						# kill the experiment once the monitor has talked
-						logger.info('...sending SIGINT to process')
+						logger.info('...sending signal to process')
 						# expProcess.send_signal(signal.SIGINT)
 						expProcess.send_signal(signal.SIGTERM)
 						logger.info('...signal sent')
@@ -201,8 +214,12 @@ if __name__ == '__main__':
 					time.sleep(30)
 					logger.info('========================================')
 
-			connection.close()
+
+			# create the results dir in case is not already created
+			subprocess.call(['mkdir','-p', resultsDest])
 			shutil.move(logFilename, resultsDest)
+
+
 			logger.info('*** Learning experiments execution finished ***')
 
 		except IOError as e:

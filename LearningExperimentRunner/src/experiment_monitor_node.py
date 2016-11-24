@@ -157,7 +157,6 @@ if __name__ == '__main__':
 			print('   Usage: python experiment_monitor_node.py <ip> <port> <nsets> <world_name>')
 			sys.exit(0)
 
-
 		IP = sys.argv[1]
 		PORT = int(sys.argv[2])
 		NSETS = int(sys.argv[3])
@@ -168,7 +167,6 @@ if __name__ == '__main__':
 		if DEBUG:
 			logLevel = rospy.DEBUG
 		rospy.init_node('experiment_monitor', anonymous=False, log_level=logLevel)
-
 
 		# set a watchdog for faulty starts
 		rospy.Timer(rospy.Duration(120), watchdogStart, oneshot=True)

@@ -19,6 +19,7 @@ LOG_LEVEL = logging.INFO
 USE_ANGLE = True
 USE_AUTO_TRAIN = False
 TEST_SVM_PREDICTIONS = True
+OUTPUT_DIR = './output/'
 
 ##################################################
 logger = None
@@ -49,6 +50,29 @@ def getFields():
 	fields['set'] = ['']
 
 	return fields
+
+
+##################################################
+def extractTrainData(finput_, foutput_, fields_):
+	try:
+		# generate a CSV file and extract training data
+		logger.debug('Opening output file')
+		with open(foutput_, 'wb') as csvFile:
+			wr = csv.DictWriter(csvFile, fields_.keys())
+			wr.writeheader()
+
+			##### DATA DETAILS #####
+			# train data is organized as pairs (cluster id, gripper's angle)
+			#
+			# responses are
+			#     successful = False -> 0 -> class 0
+			#     successful = True -> 1 -> class 1
+			#
+			logger.info('...extracting data')
+			return traverseDirectory(finput_, fields_, wr)
+
+	except IOError as e:
+		logger.info('Unable to create output file')
 
 
 ##################################################
@@ -111,7 +135,11 @@ def traverseDirectory(dir_, fields_, writer_):
 							tmp = [extracted['cluster'], int(round(angle * splits / numpy.pi))]
 
 						train = train + [tmp]
-						response = response + [int(extracted['successful'])]
+
+						##### RESPONSE ORGANIZATION #####
+						# successful = False -> 0 -> class 0
+						# successful = True -> 1 -> class 1
+						response = response + [int(extracted['successful'])] 
 
 					logger.debug('\t...extracted: ' + str(tmp))
 
@@ -219,29 +247,30 @@ if __name__ == '__main__':
 	logger.addHandler(ch)
 
 
+	# generate output name
+	i = -1
+	fname = sys.argv[1].split('/')[i]
+	while len(fname) == 0:
+		i = i -1
+		fname = sys.argv[1].split('/')[i]
+
+
+	# generate output directory
+	os.system('mkdir -p ' + OUTPUT_DIR)
+
+
 	# get the fields to extract
 	logger.debug('Generating fields')
 	fields = getFields()
 
 
-	try:
-		# generate a CSV file and extract training data
-		logger.debug('Opening output file')
-		with open('extracted_data.csv', 'wb') as csvFile:
-			wr = csv.DictWriter(csvFile, fields.keys())
-			wr.writeheader()
-			train, response = traverseDirectory(sys.argv[1], fields, wr)
-			logger.info('Extracted %d items', len(train))
-
-		logger.info('Extraction finished')
-
-	except IOError as e:
-		logger.info('Unable to create output file')
+	# retrieve the training data
+	train, response = extractTrainData(sys.argv[1], OUTPUT_DIR + fname + '.csv', fields)
+	logger.info('Extracted %d items', len(train))
 
 
-	# train a classificator
-	logger.info('Training classificator')
-
+	# train a classifier
+	logger.info('Training classifier')
 	tt = numpy.array(train, dtype = numpy.float32)
 	rr = numpy.array(response, dtype = numpy.float32)
 
@@ -256,11 +285,14 @@ if __name__ == '__main__':
 		svm.train(tt, rr, params=svmParams)
 
 	logger.info('Saving model to disk')
-	svm.save('svm.yaml')
+	svm.save(OUTPUT_DIR + fname + '.yaml')
 
+
+	# test classifier predictions
 	if TEST_SVM_PREDICTIONS:
 		testPredictions(svm)
 
-	calcDistribution(svm)
+	# calcDistribution(svm)
+
 
 	logger.info('Execution finished')
