@@ -40,11 +40,13 @@ def getPackageDir():
 ##################################################
 def cleanOutputDir(pkgDir_):
 	outputDir = pkgDir_ + ROS_APP_OUTPUT_DIR
-	shutil.rmtree(outputDir)
-	os.mkdir(outputDir)
+	if os.path.exists(outputDir):
+		shutil.rmtree(outputDir)
+		os.mkdir(outputDir)
 
-	shutil.rmtree(defs.MONITOR_OUTPUT)
-	os.mkdir(defs.MONITOR_OUTPUT)
+	if os.path.exists(defs.MONITOR_OUTPUT):
+		shutil.rmtree(defs.MONITOR_OUTPUT)
+		os.mkdir(defs.MONITOR_OUTPUT)
 
 
 ##################################################
