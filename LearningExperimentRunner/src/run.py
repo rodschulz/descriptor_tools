@@ -16,7 +16,7 @@ import logging
 
 ##################################################
 ################## APP'S CONFIG ##################
-LOG_LEVEL = logging.DEBUG
+LOG_LEVEL = logging.INFO
 PORT = 5009
 NSETS = 1
 
