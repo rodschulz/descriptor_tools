@@ -27,7 +27,7 @@ SCREENSHOT_AFTER = False
 SCREENSHOT_GAZEBO = True
 SCREENSHOT_RVIZ = False
 
-DEBUG = True
+DEBUG = False
 
 
 ##################################################
@@ -40,11 +40,6 @@ world = ''
 evalTime = None
 evalIdx = 0
 evalMaxIdx = 1
-
-experimentStarted = False
-cloudLabeled = False
-graspingAttempt = False
-
 
 mutex = Lock()
 scheduler = sched.scheduler(time.time, time.sleep)
