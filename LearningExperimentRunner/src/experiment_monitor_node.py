@@ -2,18 +2,20 @@
 @author: rodrigo
 2016
 '''
-import os
-import sys
+import os, sys
 import socket
-import re
-import wnck
-import datetime
+import re, wnck
+import datetime, time, sched
 import rospy
+from threading import Thread, Lock
 import definitions as defs
 from std_msgs.msg import Int32
 from sensor_msgs.msg import PointCloud2
 from pr2_grasping.msg import EvaluationStatus
 from moveit_msgs.msg import PickupActionGoal
+from moveit_msgs.msg import MoveGroupActionGoal
+from pr2_controllers_msgs.msg import PointHeadActionGoal
+from pr2_controllers_msgs.msg import Pr2GripperCommandActionGoal
 
 
 ##################################################
@@ -25,7 +27,7 @@ SCREENSHOT_AFTER = False
 SCREENSHOT_GAZEBO = True
 SCREENSHOT_RVIZ = False
 
-DEBUG = False
+DEBUG = True
 
 
 ##################################################
@@ -44,9 +46,15 @@ cloudLabeled = False
 graspingAttempt = False
 
 
+mutex = Lock()
+scheduler = sched.scheduler(time.time, time.sleep)
+timerStart = None
+timerActivity = None
+
+
 ##################################################
 def sendSocketMsg(msg_, shutdownMsg_):
-	rospy.loginfo('[MONITOR]...sending msg: ' + msg_)
+	rospy.loginfo('[MONITOR]...sending: ' + msg_ + ' (' + shutdownMsg_ + ')')
 
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	sock.connect((IP, PORT))
@@ -57,10 +65,20 @@ def sendSocketMsg(msg_, shutdownMsg_):
 
 
 ##################################################
+def resetTimer():
+	global mutex, scheduler, timerActivity
+	mutex.acquire()
+	scheduler.cancel(timerActivity)
+	timerActivity = scheduler.enter(300, 1, watchdogExpired, ())
+	mutex.release()
+
+
+##################################################
 def setsCallback(msg_):
 	if msg_.data >= NSETS:
+		scheduler.cancel(timer_)
 		rospy.loginfo('[MONITOR]...experiment done (%d)', msg_.data)
-		sendSocketMsg(str(defs.EXP_DONE), 'Experiment finished')
+		sendSocketMsg(str(defs.EXP_DONE), 'experiment finished')
 
 
 ##################################################
@@ -109,44 +127,58 @@ def evalCallback(msg_):
 
 ##################################################
 def cloudCallback(msg_):
-	global experimentStarted, cloudLabeled
+	global timerStart
+	if timerStart != None:
+		scheduler.cancel(timerStart)
+		timerStart = None
+
+	resetTimer()
 	rospy.logdebug('[MONITOR]...labeled cloud received')
-	experimentStarted = True
-	cloudLabeled = True
 
 
 ##################################################
-def graspingCallback(msg_):
-	global graspingAttempt
+def pickCallback(mgs_):
+	resetTimer()
 	rospy.logdebug('[MONITOR]...pickup goal received')
-	graspingAttempt = True
+
+##################################################
+def moveCallback(mgs_):
+	resetTimer()
+	rospy.logdebug('[MONITOR]...move goal received')
 
 
 ##################################################
-def watchdogStart(event_):
-	rospy.logdebug('[MONITOR]...start timer')
-	if not experimentStarted:
-		sendSocketMsg(str(defs.EXP_START_FAILED), 'Experiment start failed')
+def headCallback(mgs_):
+	resetTimer()
+	rospy.logdebug('[MONITOR]...head goal received')
 
 
 ##################################################
-def watchdogLabeling(event_):
-	global cloudLabeled
-	rospy.logdebug('[MONITOR]...labeling timer')
-	if not cloudLabeled:
-		sendSocketMsg(str(defs.EXP_HANGED), 'Timeout cloud labeling')
-	else:
-		cloudLabeled = False
+def gripperCallback(mgs_):
+	resetTimer()
+	rospy.logdebug('[MONITOR]...gripper goal received')
 
 
 ##################################################
-def watchdogGrasping(event_):
-	global graspingAttempt
-	rospy.logdebug('[MONITOR]...grasping timer')
-	if not graspingAttempt:
-		sendSocketMsg(str(defs.EXP_HANGED), 'Timeout grasping attempt')
-	else:
-		graspingAttempt = False
+def watchdogStart():
+	global timerActivity
+	if timerActivity != None:
+		scheduler.cancel(timerActivity)
+		timerActivity = None
+
+	rospy.logdebug('[MONITOR]...start timer expired')
+	sendSocketMsg(str(defs.EXP_START_FAILED), 'experiment start failed')
+
+
+##################################################
+def watchdogExpired():
+	global timerStart
+	if timerStart != None:
+		scheduler.cancel(timerStart)
+		timerStart = None
+
+	rospy.loginfo('[MONITOR]...activity timer expired')
+	sendSocketMsg(str(defs.EXP_HANGED), 'activity timer expired')
 
 
 ##################################################
@@ -168,17 +200,25 @@ if __name__ == '__main__':
 			logLevel = rospy.DEBUG
 		rospy.init_node('experiment_monitor', anonymous=False, log_level=logLevel)
 
-		# set a watchdog for faulty starts
-		rospy.Timer(rospy.Duration(120), watchdogStart, oneshot=True)
-		rospy.Timer(rospy.Duration(1200), watchdogLabeling, oneshot=False)
-		rospy.Timer(rospy.Duration(600), watchdogGrasping, oneshot=False)
 
-
+		rospy.loginfo('[MONITOR] setting subscriptions')
 		rospy.Subscriber('/pr2_grasping/processed_sets', Int32, setsCallback)
 		rospy.Subscriber('/pr2_grasping/evaluation_status', EvaluationStatus, evalCallback)
 		rospy.Subscriber('/pr2_grasping/labeled_cloud', PointCloud2, cloudCallback)
-		rospy.Subscriber('/pickup/goal', PickupActionGoal, graspingCallback)
+		
+		rospy.Subscriber('/pickup/goal', PickupActionGoal, pickCallback)
+		rospy.Subscriber('/move_group/goal', MoveGroupActionGoal, moveCallback)
+		rospy.Subscriber('/head_traj_controller/point_head_action/goal', PointHeadActionGoal, headCallback)
+		rospy.Subscriber('/r_gripper_controller/gripper_action/goal', Pr2GripperCommandActionGoal, gripperCallback)
 
+
+		rospy.loginfo('[MONITOR] setting watchdog timers')
+		timerStart = scheduler.enter(120, 1, watchdogStart, ())
+		timerActivity = scheduler.enter(300, 1, watchdogExpired, ())
+		scheduler.run()
+
+
+		rospy.loginfo('[MONITOR] node spinning')
 		rospy.spin()
 
 	except rospy.ROSInterruptException as e:
