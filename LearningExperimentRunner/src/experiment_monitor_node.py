@@ -70,9 +70,13 @@ def resetTimer():
 
 ##################################################
 def setsCallback(msg_):
+	global timerActivity
 	if msg_.data >= NSETS:
-		scheduler.cancel(timer_)
-		rospy.loginfo('[MONITOR]...experiment done (%d)', msg_.data)
+		if timerActivity != None:
+			scheduler.cancel(timerActivity)
+			timerActivity = None
+
+		rospy.loginfo('[MONITOR]...experiment done (%d sets)', msg_.data)
 		sendSocketMsg(str(defs.EXP_DONE), 'experiment finished')
 
 
