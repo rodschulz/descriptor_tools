@@ -222,31 +222,30 @@ def traverseDirectory(dir_, fields_, writer_):
 
 ##################################################
 def testPredictions(svm_, boost_, network_):
-	logger.info('Testing SVM predictions')
+	logger.info('Testing predictions...')
 	step = numpy.pi / nsplit
 
-	logger.info('====================')
-	for cluster in range(nclusters):
-		for angle in range(nsplit):
-			tmp = numpy.array([[cluster, angle * step]], dtype = numpy.float32)
-			label = svm_.predict(tmp)
-			distance = svm_.predict(tmp, True)
-			logger.info('...SVM prediction (%d, %.2f): % 2.2f / %s', tmp[0][0], tmp[0][1], distance, label == 1)
+	logger.info('')
+	logger.info('===========================================================')
+	logger.info('|  input  |      SVM      |    Boosting   |    Network    |')
+	logger.info('===========================================================')
 
-	logger.info('====================')
 	for cluster in range(nclusters):
 		for angle in range(nsplit):
-			tmp = numpy.array([[cluster, angle * step]], dtype = numpy.float32)
-			label = boost_.predict(tmp, returnSum=False)
-			votes = boost_.predict(tmp, returnSum=True)
-			logger.info('...BOOST prediction (%d, %.2f): %d / %.1f', tmp[0][0], tmp[0][1], votes, label)
+			sample = numpy.array([[cluster, angle * step]], dtype = numpy.float32)
 
-	logger.info('====================')
-	for cluster in range(nclusters):
-		for angle in range(nsplit):
-			tmp = numpy.array([[cluster, angle * step]], dtype = numpy.float32)
-			dummy, output = network_.predict(tmp)
-			logger.info('...NETWORK prediction (%d, %.2f): %f', tmp[0][0], tmp[0][1], output)
+			svmDist = svm_.predict(sample, returnDFVal=True)
+			svmLabel = svm_.predict(sample, returnDFVal=False)
+
+			boostLabel = boost_.predict(sample, returnSum=False)
+			boostVotes = boost_.predict(sample, returnSum=True)
+
+			dummy, networkOut = network_.predict(sample)
+
+			logger.info('| %d, %.2f | % 2.2f / %5s | % 2.2f / %5s | % 2.2f / %5s |', sample[0][0], sample[0][1], svmDist, svmLabel == 1, boostVotes, boostLabel == 1, networkOut, networkOut[0][0] > 0)
+
+	logger.info('===========================================================')
+	logger.info('')
 
 
 ##################################################
