@@ -225,10 +225,9 @@ def testPredictions(svm_, boost_, network_):
 	logger.info('Testing predictions...')
 	step = numpy.pi / nsplit
 
-	logger.info('')
-	logger.info('===========================================================')
-	logger.info('|  input  |      SVM      |    Boosting   |    Network    |')
-	logger.info('===========================================================')
+	table = '\n===========================================================\n'
+	table = table + '|  input  |      SVM      |    Boosting   |    Network    |\n'
+	table = table + '===========================================================\n'
 
 	for cluster in range(nclusters):
 		for angle in range(nsplit):
@@ -242,10 +241,13 @@ def testPredictions(svm_, boost_, network_):
 
 			dummy, networkOut = network_.predict(sample)
 
-			logger.info('| %d, %.2f | % 2.2f / %5s | % 2.2f / %5s | % 2.2f / %5s |', sample[0][0], sample[0][1], svmDist, svmLabel == 1, boostVotes, boostLabel == 1, networkOut, networkOut[0][0] > 0)
+			table =  table + '| {:n}, {:.2f} | {: .2f} / {:5s} | {: .2f} / {:5s} | {: .2f} / {:5s} |\n'.format(cluster, angle * step, svmDist, str(svmLabel == 1), boostVotes, str(boostLabel == 1), float(networkOut), str(networkOut[0][0] > 0))
 
-	logger.info('===========================================================')
-	logger.info('')
+		if cluster != range(nclusters)[-1]:
+			table = table + '-----------------------------------------------------------\n'
+
+	table = table + '===========================================================\n'
+	logger.info(table)
 
 
 ##################################################
