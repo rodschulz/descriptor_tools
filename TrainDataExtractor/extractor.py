@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 LOG_LEVEL = logging.INFO
 USE_ANGLE = True
 USE_AUTO_TRAIN = False
-TEST_SVM_PREDICTIONS = True
+TEST_PREDICTIONS = True
 OUTPUT_DIR = './output/'
 
 ##################################################
@@ -32,137 +32,6 @@ def gaussianKernel(alpha_, y_):
 
 def cosineKernel(alpha_, y_):
 	return (numpy.pi * numpy.cos(numpy.pi * alpha_ / 2) / 4) * y_
-
-
-##################################################
-def getFields():
-	fields = OrderedDict()
-
-	fields['object'] = ['target_object']
-	fields['completed'] = ['result', 'attempt_completed']
-	fields['successful'] = ['result', 'success']
-	fields['errCode'] = ['result', 'pick_error_code']
-	fields['cluster'] = ['cluster_label']
-	fields['angle'] = ['orientation', 'angle']
-	fields['splits'] = ['orientation', 'split_number']
-	fields['graspId'] = ['grasp', 'id']
-	fields['experiment'] = ['']
-	fields['set'] = ['']
-
-	return fields
-
-
-##################################################
-def extractTrainData(finput_, foutput_, fields_):
-	try:
-		# generate a CSV file and extract training data
-		logger.debug('Opening output file')
-		with open(foutput_, 'wb') as csvFile:
-			wr = csv.DictWriter(csvFile, fields_.keys())
-			wr.writeheader()
-
-			##### DATA DETAILS #####
-			# train data is organized as pairs (cluster id, gripper's angle)
-			#
-			# responses are
-			#     successful = False -> 0 -> class 0
-			#     successful = True -> 1 -> class 1
-			#
-			logger.info('...extracting data')
-			return traverseDirectory(finput_, fields_, wr)
-
-	except IOError as e:
-		logger.info('Unable to create output file')
-
-
-##################################################
-def traverseDirectory(dir_, fields_, writer_):
-	train = []
-	response = []
-
-	# iterate over files in the directory
-	for f in os.listdir(dir_):
-		element = dir_ + f
-
-		if (os.path.isdir(element)):
-			logger.info('...traversing ' + f)
-			t, r = traverseDirectory(element + '/', fields_, writer_)
-
-			if len(t) > 0:
-				train = train + t
-				response = response + r
-
-		else:
-			# process only YAML files, skip the rest
-			if not f.split('.')[-1].lower() == 'yaml':
-				continue
-
-			logger.info('...extracting ' + f)
-			try:
-				# generate the output CSV file
-				with open(element, 'r') as ff:
-
-					# generate dictionary to extract the data
-					extracted = dict((e, None) for e in fields_.keys())
-
-					# perform the extraction
-					fileData = yaml.load(ff)
-					for key in fields_:
-						seq = fields_[key]
-
-						# read from YAML only the existing keys
-						if seq[0] in fileData:
-							node = fileData[seq[0]]
-							for i in range(1, len(seq)):
-								node = node[seq[i]]
-							extracted[key] = node
-
-					extracted['experiment'] = f
-					extracted['set'] = dir_.strip('/').split('/')[-1]
-
-					# write data to CSV file
-					writer_.writerow(extracted)
-
-					# return the data for training
-					tmp = []
-					if extracted['completed']:
-						
-						if USE_ANGLE:
-							tmp = [extracted['cluster'], extracted['angle']]
-						else:
-							angle = extracted['angle']
-							splits = extracted['splits']
-							tmp = [extracted['cluster'], int(round(angle * splits / numpy.pi))]
-
-						train = train + [tmp]
-
-						##### RESPONSE ORGANIZATION #####
-						# successful = False -> 0 -> class 0
-						# successful = True -> 1 -> class 1
-						response = response + [int(extracted['successful'])] 
-
-					logger.debug('\t...extracted: ' + str(tmp))
-
-			except IOError as e:
-				logger.info('Unable to file ' + f)
-
-	result = [train, response]
-	logger.debug('...returning: ' + str(result))
-	return result
-
-
-##################################################
-def testPredictions(svm_):
-	logger.info('Testing SVM predictions')
-
-	step = numpy.pi / nsplit
-	for label in range(nclusters):
-		for angle in range(nsplit):
-			tmp = numpy.array([[label, angle * step]], dtype = numpy.float32)
-			res = svm.predict(tmp)
-			distance = svm.predict(tmp, True)
-			logger.info('...prediction (%d, %.2f): % 3.3f / %s', tmp[0][0], tmp[0][1], distance, res == 1)
-
 
 ##################################################
 def calcDistribution(svm_):
@@ -232,6 +101,208 @@ def calcDistribution(svm_):
 
 
 ##################################################
+def getFields():
+	fields = OrderedDict()
+
+	fields['object'] = ['target_object']
+	fields['completed'] = ['result', 'attempt_completed']
+	fields['successful'] = ['result', 'success']
+	fields['errCode'] = ['result', 'pick_error_code']
+	fields['cluster'] = ['cluster_label']
+	fields['angle'] = ['orientation', 'angle']
+	fields['splits'] = ['orientation', 'split_number']
+	fields['graspId'] = ['grasp', 'id']
+	fields['experiment'] = ['']
+	fields['set'] = ['']
+
+	return fields
+
+
+##################################################
+def extractTrainData(finput_, foutput_, fields_):
+	try:
+		# generate a CSV file and extract training data
+		logger.debug('Opening output file')
+		with open(foutput_, 'wb') as csvFile:
+			wr = csv.DictWriter(csvFile, fields_.keys())
+			wr.writeheader()
+
+			##### DATA DETAILS #####
+			# train data is organized as pairs (cluster id, gripper's angle)
+			#
+			# responses are
+			#     successful = False -> 0 -> class 0
+			#     successful = True -> 1 -> class 1
+			#
+			logger.info('...extracting data')
+			return traverseDirectory(finput_, fields_, wr)
+
+	except IOError as e:
+		logger.info('Unable to create output file')
+
+
+##################################################
+def traverseDirectory(dir_, fields_, writer_):
+	train = []
+	response = []
+	nfiles = 0
+
+	# iterate over files in the directory
+	for f in os.listdir(dir_):
+		element = dir_ + f
+
+		if (os.path.isdir(element)):
+			logger.info('...traversing ' + f)
+			t, r, nf = traverseDirectory(element + '/', fields_, writer_)
+
+			nfiles = nfiles + nf
+			if len(t) > 0:
+				train = train + t
+				response = response + r
+
+		else:
+			# process only YAML files, skip the rest
+			if not f.split('.')[-1].lower() == 'yaml':
+				continue
+
+			nfiles = nfiles + 1
+
+			logger.info('...extracting ' + f)
+			try:
+				# generate the output CSV file
+				with open(element, 'r') as ff:
+
+					# generate dictionary to extract the data
+					extracted = dict((e, None) for e in fields_.keys())
+
+					# perform the extraction
+					fileData = yaml.load(ff)
+					for key in fields_:
+						seq = fields_[key]
+
+						# read from YAML only the existing keys
+						if seq[0] in fileData:
+							node = fileData[seq[0]]
+							for i in range(1, len(seq)):
+								node = node[seq[i]]
+							extracted[key] = node
+
+					extracted['experiment'] = f
+					extracted['set'] = dir_.strip('/').split('/')[-1]
+
+					# write data to CSV file
+					writer_.writerow(extracted)
+
+					# return the data for training
+					tmp = []
+					if extracted['completed']:
+						if USE_ANGLE:
+							tmp = [extracted['cluster'], extracted['angle']]
+						else:
+							angle = extracted['angle']
+							splits = extracted['splits']
+							tmp = [extracted['cluster'], int(round(angle * splits / numpy.pi))]
+
+						train = train + [tmp]
+
+						##### RESPONSE ORGANIZATION #####
+						# successful = False -> 0 -> class 0
+						# successful = True -> 1 -> class 1
+						response = response + [int(extracted['successful'])] 
+
+					logger.debug('\t...extracted: ' + str(tmp))
+
+			except IOError as e:
+				logger.info('Unable to file ' + f)
+
+	result = [train, response, nfiles]
+	logger.debug('...returning: ' + str(result))
+	return result
+
+
+##################################################
+def testPredictions(svm_, boost_, network_):
+	logger.info('Testing SVM predictions')
+	step = numpy.pi / nsplit
+
+	logger.info('====================')
+	for cluster in range(nclusters):
+		for angle in range(nsplit):
+			tmp = numpy.array([[cluster, angle * step]], dtype = numpy.float32)
+			label = svm_.predict(tmp)
+			distance = svm_.predict(tmp, True)
+			logger.info('...SVM prediction (%d, %.2f): % 2.2f / %s', tmp[0][0], tmp[0][1], distance, label == 1)
+
+	logger.info('====================')
+	for cluster in range(nclusters):
+		for angle in range(nsplit):
+			tmp = numpy.array([[cluster, angle * step]], dtype = numpy.float32)
+			label = boost_.predict(tmp, returnSum=False)
+			votes = boost_.predict(tmp, returnSum=True)
+			logger.info('...BOOST prediction (%d, %.2f): %d / %.1f', tmp[0][0], tmp[0][1], votes, label)
+
+	logger.info('====================')
+	for cluster in range(nclusters):
+		for angle in range(nsplit):
+			tmp = numpy.array([[cluster, angle * step]], dtype = numpy.float32)
+			dummy, output = network_.predict(tmp)
+			logger.info('...NETWORK prediction (%d, %.2f): %f', tmp[0][0], tmp[0][1], output)
+
+
+##################################################
+def trainSVM(input_, response_):
+	logger.info('...training SVM')
+
+	svmParams = dict(kernel_type = cv2.SVM_RBF, svm_type = cv2.SVM_C_SVC, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001))
+
+	svm = cv2.SVM()
+	if USE_AUTO_TRAIN:
+		logger.info('...using AUTO_TRAIN')
+		svm.train_auto(input_, response_, None, None, params=svmParams, k_fold=10)
+	else:
+		svmParams['C'] = 2.78
+		svm.train(input_, response_, params=svmParams)
+
+	logger.info('Saving SVM to disk')
+	svm.save(OUTPUT_DIR + fname + '_svm.yaml')
+
+	return svm
+
+
+##################################################
+def trainBoost(input_, response_):
+	logger.info('...training boosted classifier')
+
+	boostParams = dict(boost_type = cv2.BOOST_REAL, weak_count = 100, weight_trim_rate = 0.95, cv_folds = 10, max_depth = 1)
+
+	boost = cv2.Boost()
+	boost.train(trainData=input_, tflag=cv2.CV_ROW_SAMPLE, responses=response_, params=boostParams, update=False)
+
+	logger.info('Saving boosting classifier to disk')
+	boost.save(OUTPUT_DIR + fname + '_boost.yaml')
+
+	return boost
+
+
+##################################################
+def trainNetwork(input_, response_):
+	logger.info('...training neural network')
+	# networkParams = dict(train_method=cv2.ANN_MLP_TRAIN_PARAMS_BACKPROP, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001), bp_dw_scale=0.1, bp_moment_scale=0.1, flags=(cv2.ANN_MLP_UPDATE_WEIGHTS | cv2.ANN_MLP_NO_INPUT_SCALE))
+	networkParams = dict(train_method=cv2.ANN_MLP_TRAIN_PARAMS_RPROP, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001), rp_dw0=0.1, rp_dw_plus=1.2, rp_dw_minus=0.5, rp_dw_min=0.1, rp_dw_max=50, flags=(cv2.ANN_MLP_UPDATE_WEIGHTS | cv2.ANN_MLP_NO_INPUT_SCALE))
+
+	network = cv2.ANN_MLP()
+	network.create(layerSizes=numpy.array([2,3,5,3,1], dtype=numpy.int32), activateFunc=cv2.ANN_MLP_SIGMOID_SYM, fparam1=1, fparam2=1)
+
+	rr = response_ -1 + response_
+	network.train(inputs=input_, outputs=rr, sampleWeights=numpy.ones(len(response_), dtype = numpy.float32), params=networkParams)
+
+	logger.info('Saving neural network to disk')
+	network.save(OUTPUT_DIR + fname + '_network.yaml')
+
+	return network
+
+
+##################################################
 if __name__ == '__main__':
 	if (len(sys.argv) < 2):
 		print('NOT ENOUGH ARGUMENTS GIVEN.\n')
@@ -265,34 +336,25 @@ if __name__ == '__main__':
 
 
 	# retrieve the training data
-	train, response = extractTrainData(sys.argv[1], OUTPUT_DIR + fname + '.csv', fields)
-	logger.info('Extracted %d items', len(train))
+	train, response, nfiles = extractTrainData(sys.argv[1], OUTPUT_DIR + fname + '.csv', fields)
+	logger.info('Traversed %d files', nfiles)
+	logger.info('\t- %d completed', len(response))
+	logger.info('\t- %d successful', sum(response))
+	logger.info('\t- ratio: %f', float(sum(response)) / float(len(train)))
 
 
 	# train a classifier
-	logger.info('Training classifier')
+	logger.info('Preparing data')
 	tt = numpy.array(train, dtype = numpy.float32)
 	rr = numpy.array(response, dtype = numpy.float32)
 
-	svm = cv2.SVM()
-	svmParams = dict(kernel_type = cv2.SVM_RBF, svm_type = cv2.SVM_C_SVC, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001))
+	svm = trainSVM(tt, rr)
+	boost = trainBoost(tt, rr)
+	network = trainNetwork(tt, rr)
 
-	if USE_AUTO_TRAIN:
-		logger.info('...using AUTO_TRAIN')
-		svm.train_auto(tt, rr, None, None, params=svmParams, k_fold=10)
-	else:
-		svmParams['C'] = 2.78
-		svm.train(tt, rr, params=svmParams)
-
-	logger.info('Saving model to disk')
-	svm.save(OUTPUT_DIR + fname + '.yaml')
-
-
-	# test classifier predictions
-	if TEST_SVM_PREDICTIONS:
-		testPredictions(svm)
+	if TEST_PREDICTIONS:
+		testPredictions(svm, boost, network)
 
 	# calcDistribution(svm)
-
 
 	logger.info('Execution finished')
