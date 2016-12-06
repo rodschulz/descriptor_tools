@@ -187,13 +187,12 @@ if __name__ == '__main__':
 						connection, addr = sock.accept()
 						while True:
 							data = connection.recv(128)
-							logger.info('...rx data: ' + data)
+							logger.info('...rcvd: ' + data + ' (' + defs.finishString(int(data)) + ')')
 							break
 						connection.close()
 
 						# kill the experiment once the monitor has talked
 						logger.info('...sending signal to process')
-						# expProcess.send_signal(signal.SIGINT)
 						expProcess.send_signal(signal.SIGTERM)
 						logger.info('...signal sent')
 						time.sleep(5)
