@@ -155,7 +155,7 @@ def testPredictions(svm_, svm_auto_, boost_, network_):
 	table = table + '|  input  |      SVM      |   SVM auto    |    Boosting   |    Network    |\n'
 	table = table + '===========================================================================\n'
 
-	for cluster in range(nclusters):
+	for cluster in range(1, nclusters + 1):
 		for angle in range(nsplit):
 			sample = numpy.array([[cluster, angle * step]], dtype = numpy.float32)
 
@@ -172,7 +172,7 @@ def testPredictions(svm_, svm_auto_, boost_, network_):
 
 			table =  table + '| {:n}, {:.2f} | {: .2f} / {:5s} | {: .2f} / {:5s} | {: .2f} / {:5s} | {: .2f} / {:5s} |\n'.format(cluster, angle * step, svmDist, str(svmLabel == 1), svmAutoDist, str(svmAutoLabel == 1), boostVotes, str(boostLabel == 1), float(networkOut), str(networkOut[0][0] > 0))
 
-		if cluster != range(nclusters)[-1]:
+		if cluster != nclusters:
 			table = table + '---------------------------------------------------------------------------\n'
 
 	table = table + '===========================================================================\n'
@@ -186,9 +186,10 @@ def trainSVM(input_, response_):
 	svmParams = dict(kernel_type = cv2.SVM_RBF, svm_type = cv2.SVM_C_SVC, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001))
 
 	svm_auto = cv2.SVM()
-	svm_auto.train_auto(input_, response_, None, None, params=svmParams, k_fold=10)
+	svm_auto.train_auto(input_, response_, None, None, params=svmParams, k_fold=7)
 
-	svmParams['C'] = 2.78
+	svmParams['C'] = 100
+	svmParams['gamma'] = 2
 	svm = cv2.SVM()
 	svm.train(input_, response_, params=svmParams)
 
@@ -203,7 +204,7 @@ def trainSVM(input_, response_):
 def trainBoost(input_, response_):
 	logger.info('...training boosted classifier')
 
-	boostParams = dict(boost_type = cv2.BOOST_REAL, weak_count = 100, weight_trim_rate = 0.95, cv_folds = 5, max_depth = 1)
+	boostParams = dict(boost_type = cv2.BOOST_REAL, weak_count = 100, weight_trim_rate = 0.95, cv_folds = 3, max_depth = 1)
 
 	boost = cv2.Boost()
 	boost.train(trainData=input_, tflag=cv2.CV_ROW_SAMPLE, responses=response_, params=boostParams, update=False)
@@ -219,12 +220,12 @@ def trainNetwork(input_, response_):
 	logger.info('...training neural network')
 	# networkParams = dict(train_method=cv2.ANN_MLP_TRAIN_PARAMS_BACKPROP, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001), bp_dw_scale=0.1, bp_moment_scale=0.1, flags=(cv2.ANN_MLP_UPDATE_WEIGHTS | cv2.ANN_MLP_NO_INPUT_SCALE))
 	
-	# networkParams = dict(train_method=cv2.ANN_MLP_TRAIN_PARAMS_BACKPROP, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001), bp_dw_scale=0.1, bp_moment_scale=0.1)
+	networkParams = dict(train_method=cv2.ANN_MLP_TRAIN_PARAMS_BACKPROP, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 5000, 0.000001), bp_dw_scale=0.1, bp_moment_scale=0.1)
 
 
 	# networkParams = dict(train_method=cv2.ANN_MLP_TRAIN_PARAMS_RPROP, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001), rp_dw0=0.1, rp_dw_plus=1.2, rp_dw_minus=0.5, rp_dw_min=0.1, rp_dw_max=50, flags=(cv2.ANN_MLP_UPDATE_WEIGHTS | cv2.ANN_MLP_NO_INPUT_SCALE))
 
-	networkParams = dict(train_method=cv2.ANN_MLP_TRAIN_PARAMS_RPROP, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001), rp_dw0=0.1, rp_dw_plus=1.2, rp_dw_minus=0.5, rp_dw_min=0.1, rp_dw_max=50)
+	# networkParams = dict(train_method=cv2.ANN_MLP_TRAIN_PARAMS_RPROP, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001), rp_dw0=0.1, rp_dw_plus=1.2, rp_dw_minus=0.5, rp_dw_min=0.1, rp_dw_max=50)
 
 	network = cv2.ANN_MLP()
 	network.create(layerSizes=numpy.array([2,3,5,3,1], dtype=numpy.int32), activateFunc=cv2.ANN_MLP_SIGMOID_SYM, fparam1=1, fparam2=1)
@@ -236,6 +237,17 @@ def trainNetwork(input_, response_):
 	network.save(OUTPUT_DIR + fname + '_network.yaml')
 
 	return network
+
+
+##################################################
+def plotData(train_, resp_):
+	cls0 = train_[resp_ == 0]
+	cls1 = train_[resp_ == 1]
+
+	plt.plot(cls0[:,0], cls0[:,1], 'bo')
+	plt.plot(cls1[:,0], cls1[:,1], 'rx')
+	plt.axis([0, nclusters + 1, -0.5, 3.5])
+	plt.show()
 
 
 ##################################################
@@ -290,5 +302,9 @@ if __name__ == '__main__':
 
 	if TEST_PREDICTIONS:
 		testPredictions(svm, svm_auto, boost, network)
+
+	# plot training data
+	plotData(tt, rr)
+
 
 	logger.info('Execution finished')
