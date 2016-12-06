@@ -12,4 +12,5 @@ LearningExperimentRunner/world_set*
 TrainDataExtractor/*.csv
 TrainDataExtractor/*.yaml
 TrainDataExtractor/*.ods
+TrainDataExtractor/input/*
 TrainDataExtractor/output/*
