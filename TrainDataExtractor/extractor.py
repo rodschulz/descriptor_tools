@@ -17,7 +17,6 @@ import matplotlib.pyplot as plt
 ################## APP'S CONFIG ##################
 LOG_LEVEL = logging.INFO
 USE_ANGLE = True
-USE_AUTO_TRAIN = False
 TEST_PREDICTIONS = True
 OUTPUT_DIR = './output/'
 
@@ -25,79 +24,6 @@ OUTPUT_DIR = './output/'
 logger = None
 nclusters = 7
 nsplit = 4
-
-
-def gaussianKernel(alpha_, y_):
-	return (numpy.exp(-0.5 * alpha_ * alpha_) / numpy.sqrt(2 * numpy.pi)) * y_
-
-def cosineKernel(alpha_, y_):
-	return (numpy.pi * numpy.cos(numpy.pi * alpha_ / 2) / 4) * y_
-
-##################################################
-def calcDistribution(svm_):
-	logger.info('Testing SVM predictions')
-
-	# result = numpy.array()
-
-	step = numpy.pi / nsplit
-	angles = numpy.arange(-numpy.pi, numpy.pi, step)
-	for label in range(nclusters):
-		logger.info('...evaluating label ' + str(label))
-
-		# generate the results for the current cluster
-		results = numpy.array([])
-		for angle in angles:
-			d = numpy.array([[label, angle]], dtype = numpy.float32)
-			p = svm.predict(d)
-			results = numpy.append(results, p)
-
-		# evaluate the kernel
-		evalStep = numpy.pi / 100
-		# evalAngles = numpy.arange(0, numpy.pi, evalStep)
-		evalAngles = numpy.arange(-numpy.pi, numpy.pi, evalStep)
-
-		dist = []
-		h = 0.5
-		for alpha in evalAngles:
-			acc = 0
-			# n = nsplit + 1
-			n = nsplit
-			for j in range(n):
-				
-				
-
-				delta = (alpha - step * j)
-				
-				# logger.info('alpha: %.2f - ang: %.2f - delta: %f', alpha, step * j, delta)
-				# raw_input()
-
-				# if abs(delta) >= numpy.pi:
-				# 	delta = 0
-				# 	logger.info('changing!')
-
-				delta = delta / h
-				val = gaussianKernel(delta, results[j % nsplit])
-				# val = cosineKernel(delta, results[j % nsplit])
-				acc = acc + val
-
-			acc = acc / (n * h)
-			dist.append(acc)
-
-
-		tmpAngles = numpy.append(angles, numpy.pi)
-		tmpRes = numpy.append(results, results[0])
-
-		fig, ax1 = plt.subplots()
-		ax1.plot(evalAngles, dist, 'r--')
-		ax1.set_xlabel('Angle')
-		ax1.set_ylabel('Value')
-		ax2 = ax1.twinx()
-		ax2.plot(tmpAngles, tmpRes, 'bs')
-		ax2.set_ylabel('Prediction')
-
-		# ax1.set_xlim([0, numpy.pi])
-		# ax2.set_xlim([0, numpy.pi])
-		# plt.show()
 
 
 ##################################################
@@ -221,13 +147,13 @@ def traverseDirectory(dir_, fields_, writer_):
 
 
 ##################################################
-def testPredictions(svm_, boost_, network_):
+def testPredictions(svm_, svm_auto_, boost_, network_):
 	logger.info('Testing predictions...')
 	step = numpy.pi / nsplit
 
-	table = '\n===========================================================\n'
-	table = table + '|  input  |      SVM      |    Boosting   |    Network    |\n'
-	table = table + '===========================================================\n'
+	table = '\n===========================================================================\n'
+	table = table + '|  input  |      SVM      |   SVM auto    |    Boosting   |    Network    |\n'
+	table = table + '===========================================================================\n'
 
 	for cluster in range(nclusters):
 		for angle in range(nsplit):
@@ -236,17 +162,20 @@ def testPredictions(svm_, boost_, network_):
 			svmDist = svm_.predict(sample, returnDFVal=True)
 			svmLabel = svm_.predict(sample, returnDFVal=False)
 
+			svmAutoDist = svm_auto_.predict(sample, returnDFVal=True)
+			svmAutoLabel = svm_auto_.predict(sample, returnDFVal=False)
+
 			boostLabel = boost_.predict(sample, returnSum=False)
 			boostVotes = boost_.predict(sample, returnSum=True)
 
 			dummy, networkOut = network_.predict(sample)
 
-			table =  table + '| {:n}, {:.2f} | {: .2f} / {:5s} | {: .2f} / {:5s} | {: .2f} / {:5s} |\n'.format(cluster, angle * step, svmDist, str(svmLabel == 1), boostVotes, str(boostLabel == 1), float(networkOut), str(networkOut[0][0] > 0))
+			table =  table + '| {:n}, {:.2f} | {: .2f} / {:5s} | {: .2f} / {:5s} | {: .2f} / {:5s} | {: .2f} / {:5s} |\n'.format(cluster, angle * step, svmDist, str(svmLabel == 1), svmAutoDist, str(svmAutoLabel == 1), boostVotes, str(boostLabel == 1), float(networkOut), str(networkOut[0][0] > 0))
 
 		if cluster != range(nclusters)[-1]:
-			table = table + '-----------------------------------------------------------\n'
+			table = table + '---------------------------------------------------------------------------\n'
 
-	table = table + '===========================================================\n'
+	table = table + '===========================================================================\n'
 	logger.info(table)
 
 
@@ -256,25 +185,25 @@ def trainSVM(input_, response_):
 
 	svmParams = dict(kernel_type = cv2.SVM_RBF, svm_type = cv2.SVM_C_SVC, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001))
 
+	svm_auto = cv2.SVM()
+	svm_auto.train_auto(input_, response_, None, None, params=svmParams, k_fold=10)
+
+	svmParams['C'] = 2.78
 	svm = cv2.SVM()
-	if USE_AUTO_TRAIN:
-		logger.info('...using AUTO_TRAIN')
-		svm.train_auto(input_, response_, None, None, params=svmParams, k_fold=10)
-	else:
-		svmParams['C'] = 2.78
-		svm.train(input_, response_, params=svmParams)
+	svm.train(input_, response_, params=svmParams)
 
 	logger.info('Saving SVM to disk')
+	svm_auto.save(OUTPUT_DIR + fname + '_svm_auto.yaml')
 	svm.save(OUTPUT_DIR + fname + '_svm.yaml')
 
-	return svm
+	return [svm, svm_auto]
 
 
 ##################################################
 def trainBoost(input_, response_):
 	logger.info('...training boosted classifier')
 
-	boostParams = dict(boost_type = cv2.BOOST_REAL, weak_count = 100, weight_trim_rate = 0.95, cv_folds = 10, max_depth = 1)
+	boostParams = dict(boost_type = cv2.BOOST_REAL, weak_count = 100, weight_trim_rate = 0.95, cv_folds = 5, max_depth = 1)
 
 	boost = cv2.Boost()
 	boost.train(trainData=input_, tflag=cv2.CV_ROW_SAMPLE, responses=response_, params=boostParams, update=False)
@@ -289,7 +218,13 @@ def trainBoost(input_, response_):
 def trainNetwork(input_, response_):
 	logger.info('...training neural network')
 	# networkParams = dict(train_method=cv2.ANN_MLP_TRAIN_PARAMS_BACKPROP, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001), bp_dw_scale=0.1, bp_moment_scale=0.1, flags=(cv2.ANN_MLP_UPDATE_WEIGHTS | cv2.ANN_MLP_NO_INPUT_SCALE))
-	networkParams = dict(train_method=cv2.ANN_MLP_TRAIN_PARAMS_RPROP, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001), rp_dw0=0.1, rp_dw_plus=1.2, rp_dw_minus=0.5, rp_dw_min=0.1, rp_dw_max=50, flags=(cv2.ANN_MLP_UPDATE_WEIGHTS | cv2.ANN_MLP_NO_INPUT_SCALE))
+	
+	# networkParams = dict(train_method=cv2.ANN_MLP_TRAIN_PARAMS_BACKPROP, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001), bp_dw_scale=0.1, bp_moment_scale=0.1)
+
+
+	# networkParams = dict(train_method=cv2.ANN_MLP_TRAIN_PARAMS_RPROP, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001), rp_dw0=0.1, rp_dw_plus=1.2, rp_dw_minus=0.5, rp_dw_min=0.1, rp_dw_max=50, flags=(cv2.ANN_MLP_UPDATE_WEIGHTS | cv2.ANN_MLP_NO_INPUT_SCALE))
+
+	networkParams = dict(train_method=cv2.ANN_MLP_TRAIN_PARAMS_RPROP, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001), rp_dw0=0.1, rp_dw_plus=1.2, rp_dw_minus=0.5, rp_dw_min=0.1, rp_dw_max=50)
 
 	network = cv2.ANN_MLP()
 	network.create(layerSizes=numpy.array([2,3,5,3,1], dtype=numpy.int32), activateFunc=cv2.ANN_MLP_SIGMOID_SYM, fparam1=1, fparam2=1)
@@ -349,13 +284,11 @@ if __name__ == '__main__':
 	tt = numpy.array(train, dtype = numpy.float32)
 	rr = numpy.array(response, dtype = numpy.float32)
 
-	svm = trainSVM(tt, rr)
+	svm, svm_auto = trainSVM(tt, rr)
 	boost = trainBoost(tt, rr)
 	network = trainNetwork(tt, rr)
 
 	if TEST_PREDICTIONS:
-		testPredictions(svm, boost, network)
-
-	# calcDistribution(svm)
+		testPredictions(svm, svm_auto, boost, network)
 
 	logger.info('Execution finished')
