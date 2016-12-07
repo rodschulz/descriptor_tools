@@ -79,7 +79,7 @@ def copyResults(src_, dest_):
 	# create results subdirectory
 	subprocess.call(['mkdir','-p', dest_])
 
-	# copy files
+	# move files
 	files = os.listdir(src_)
 	for f in files:
 		filename = os.path.join(src_, f)

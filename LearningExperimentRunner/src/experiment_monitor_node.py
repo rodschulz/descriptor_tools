@@ -37,7 +37,6 @@ PORT = 9999
 NSETS = 5
 
 world = ''
-evalTime = None
 evalIdx = 0
 evalMaxIdx = 1
 
@@ -82,12 +81,9 @@ def setsCallback(msg_):
 
 ##################################################
 def evalCallback(msg_):
-	global evalTime, evalIdx, world
+	global evalIdx
 
-	if evalTime == None:
-		evalTime = defs.STAMP_FORMAT.format(datetime.datetime.now())
-
-	prefix = world + '_' + evalTime
+	prefix = msg_.id
 	sufix = ''
 	if msg_.status == EvaluationStatus.BEFORE_EVAL:
 		if not SCREENSHOT_BEFORE:
@@ -102,7 +98,6 @@ def evalCallback(msg_):
 
 	elif msg_.status == EvaluationStatus.AFTER_EVAL:
 		sufix = '_AFTER'
-		evalTime = None
 		evalIdx = 0
 		if not SCREENSHOT_AFTER:
 			return
