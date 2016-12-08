@@ -16,14 +16,14 @@ import matplotlib.pyplot as plt
 ##################################################
 ################## APP'S CONFIG ##################
 LOG_LEVEL = logging.INFO
-USE_ANGLE = True
+USE_VECTOR = True
 TEST_PREDICTIONS = True
 OUTPUT_DIR = './output/'
 
 ##################################################
 logger = None
+nsplit = None
 nclusters = 7
-nsplit = 4
 
 
 ##################################################
@@ -45,12 +45,12 @@ def getFields():
 
 
 ##################################################
-def extractTrainData(finput_, foutput_, fields_):
+def extractTrainData(inputdir_, foutput_, csvfields_):
 	try:
 		# generate a CSV file and extract training data
 		logger.debug('Opening output file')
-		with open(foutput_, 'wb') as csvFile:
-			wr = csv.DictWriter(csvFile, fields_.keys())
+		with open(foutput_, 'wb') as csvfile:
+			wr = csv.DictWriter(csvfile, csvfields_.keys(), extrasaction='ignore')
 			wr.writeheader()
 
 			##### DATA DETAILS #####
@@ -61,25 +61,27 @@ def extractTrainData(finput_, foutput_, fields_):
 			#     successful = True -> 1 -> class 1
 			#
 			logger.info('...extracting data')
-			return traverseDirectory(finput_, fields_, wr)
+			return traverseDirectory(inputdir_, csvfields_, wr)
 
 	except IOError as e:
 		logger.info('Unable to create output file')
 
 
 ##################################################
-def traverseDirectory(dir_, fields_, writer_):
+def traverseDirectory(inputdir_, fields_, csvwriter_ = None):
+	global nsplit
+
 	train = []
 	response = []
 	nfiles = 0
 
 	# iterate over files in the directory
-	for f in os.listdir(dir_):
-		element = dir_ + f
+	for f in os.listdir(inputdir_):
+		element = inputdir_ + f
 
 		if (os.path.isdir(element)):
 			logger.info('...traversing ' + f)
-			t, r, nf = traverseDirectory(element + '/', fields_, writer_)
+			t, r, nf = traverseDirectory(element + '/', fields_, csvwriter_)
 
 			nfiles = nfiles + nf
 			if len(t) > 0:
@@ -98,43 +100,49 @@ def traverseDirectory(dir_, fields_, writer_):
 				# generate the output CSV file
 				with open(element, 'r') as ff:
 
-					# generate dictionary to extract the data
-					extracted = dict((e, None) for e in fields_.keys())
+					# generate dictionary for extraction
+					data = dict((e, None) for e in fields_.keys())
 
 					# perform the extraction
-					fileData = yaml.load(ff)
+					filedata = yaml.load(ff)
 					for key in fields_:
 						seq = fields_[key]
 
 						# read from YAML only the existing keys
-						if seq[0] in fileData:
-							node = fileData[seq[0]]
+						if seq[0] in filedata:
+							node = filedata[seq[0]]
 							for i in range(1, len(seq)):
 								node = node[seq[i]]
-							extracted[key] = node
+							data[key] = node
 
-					extracted['experiment'] = f
-					extracted['set'] = dir_.strip('/').split('/')[-1]
+					data['experiment'] = f
+					data['set'] = inputdir_.strip('/').split('/')[-1]
 
-					# write data to CSV file
-					writer_.writerow(extracted)
 
-					# return the data for training
+					# get the number of splits from the data
+					if nsplit == None:
+						nsplit = data['splits']
+					elif nsplit != data['splits']:
+						logger.warn('Multiple splits found: %d / %d', nsplit, data['splits'])
+
+
+					# write to CSV file
+					if csvwriter_ != None:
+						csvwriter_.writerow(data)
+
+					# gen train set
 					tmp = []
-					if extracted['completed']:
-						if USE_ANGLE:
-							tmp = [extracted['cluster'], extracted['angle']]
+					if data['completed']:
+						if USE_VECTOR:
+							tmp = filedata['descriptor']['data'] + [data['angle']]
 						else:
-							angle = extracted['angle']
-							splits = extracted['splits']
-							tmp = [extracted['cluster'], int(round(angle * splits / numpy.pi))]
-
+							tmp = [data['cluster'], data['angle']]
 						train = train + [tmp]
 
 						##### RESPONSE ORGANIZATION #####
 						# successful = False -> 0 -> class 0
 						# successful = True -> 1 -> class 1
-						response = response + [int(extracted['successful'])] 
+						response = response + [int(data['successful'])] 
 
 					logger.debug('\t...extracted: ' + str(tmp))
 
@@ -142,7 +150,6 @@ def traverseDirectory(dir_, fields_, writer_):
 				logger.info('Unable to file ' + f)
 
 	result = [train, response, nfiles]
-	logger.debug('...returning: ' + str(result))
 	return result
 
 
@@ -179,8 +186,36 @@ def testPredictions(svm_, svm_auto_, boost_, network_):
 	logger.info(table)
 
 
+
 ##################################################
-def trainSVM(input_, response_):
+def evalClassifier(classifier_, data_, resp_):
+	issvm = isinstance(classifier_, type(cv2.SVM()))
+	isbst = isinstance(classifier_, type(cv2.Boost()))
+	isnet = isinstance(classifier_, type(cv2.ANN_MLP()))
+
+	missmatch = 0
+
+	logger.info('...evaluating')
+	for i in range(len(data_)):
+		sample = numpy.array([data_[i]], dtype = numpy.float32)
+
+		if issvm:
+			dist = svm_.predict(sample, returnDFVal=True)
+			label = svm_.predict(sample, returnDFVal=False)
+
+		elif isbst:
+			boostLabel = boost_.predict(sample, returnSum=False)
+			boostVotes = boost_.predict(sample, returnSum=True)
+
+		elif isnet:
+			dummy, networkOut = network_.predict(sample)
+
+
+		missmatch = missmatch + int(abs(label - resp_[i]) < 1e-10)
+
+
+##################################################
+def trainSVM(input_, response_, basedir_):
 	logger.info('...training SVM')
 
 	svmParams = dict(kernel_type = cv2.SVM_RBF, svm_type = cv2.SVM_C_SVC, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001))
@@ -188,20 +223,27 @@ def trainSVM(input_, response_):
 	svm_auto = cv2.SVM()
 	svm_auto.train_auto(input_, response_, None, None, params=svmParams, k_fold=7)
 
+	svmAutoDist = svm_auto.predict(input_[0], returnDFVal=True)
+	svmAutoLabel = svm_auto.predict(input_[0], returnDFVal=False)
+	logger.info('dist: %.4f -- label: %f --  resp: %d', svmAutoDist, svmAutoLabel, response_[0])
+
+
+
+
 	svmParams['C'] = 100
 	svmParams['gamma'] = 2
 	svm = cv2.SVM()
 	svm.train(input_, response_, params=svmParams)
 
 	logger.info('Saving SVM to disk')
-	svm_auto.save(OUTPUT_DIR + fname + '_svm_auto.yaml')
-	svm.save(OUTPUT_DIR + fname + '_svm.yaml')
+	svm_auto.save(basedir_ + '_svm_auto.yaml')
+	svm.save(basedir_ + '_svm.yaml')
 
 	return [svm, svm_auto]
 
 
 ##################################################
-def trainBoost(input_, response_):
+def trainBoost(input_, response_, basedir_):
 	logger.info('...training boosted classifier')
 
 	boostParams = dict(boost_type = cv2.BOOST_REAL, weak_count = 100, weight_trim_rate = 0.95, cv_folds = 3, max_depth = 1)
@@ -210,13 +252,13 @@ def trainBoost(input_, response_):
 	boost.train(trainData=input_, tflag=cv2.CV_ROW_SAMPLE, responses=response_, params=boostParams, update=False)
 
 	logger.info('Saving boosting classifier to disk')
-	boost.save(OUTPUT_DIR + fname + '_boost.yaml')
+	boost.save(basedir_ + '_boost.yaml')
 
 	return boost
 
 
 ##################################################
-def trainNetwork(input_, response_):
+def trainNetwork(input_, response_, basedir_):
 	logger.info('...training neural network')
 	# networkParams = dict(train_method=cv2.ANN_MLP_TRAIN_PARAMS_BACKPROP, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001), bp_dw_scale=0.1, bp_moment_scale=0.1, flags=(cv2.ANN_MLP_UPDATE_WEIGHTS | cv2.ANN_MLP_NO_INPUT_SCALE))
 	
@@ -227,14 +269,15 @@ def trainNetwork(input_, response_):
 
 	# networkParams = dict(train_method=cv2.ANN_MLP_TRAIN_PARAMS_RPROP, term_crit=(cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 10000, 0.0000000001), rp_dw0=0.1, rp_dw_plus=1.2, rp_dw_minus=0.5, rp_dw_min=0.1, rp_dw_max=50)
 
+
 	network = cv2.ANN_MLP()
-	network.create(layerSizes=numpy.array([2,3,5,3,1], dtype=numpy.int32), activateFunc=cv2.ANN_MLP_SIGMOID_SYM, fparam1=1, fparam2=1)
+	network.create(layerSizes=numpy.array([len(input_[0]),3,5,3,1], dtype=numpy.int32), activateFunc=cv2.ANN_MLP_SIGMOID_SYM, fparam1=1, fparam2=1)
 
 	rr = response_ -1 + response_
 	network.train(inputs=input_, outputs=rr, sampleWeights=numpy.ones(len(response_), dtype = numpy.float32), params=networkParams)
 
 	logger.info('Saving neural network to disk')
-	network.save(OUTPUT_DIR + fname + '_network.yaml')
+	network.save(basedir_ + '_network.yaml')
 
 	return network
 
@@ -251,10 +294,21 @@ def plotData(train_, resp_):
 
 
 ##################################################
+def getBaseName(inputdir_, outdir_):
+	i = -1
+	fname = inputdir_.split('/')[i]
+	while len(fname) == 0:
+		i = i -1
+		fname = inputdir_.split('/')[i]
+
+	return outdir_ + fname
+
+
+##################################################
 if __name__ == '__main__':
 	if (len(sys.argv) < 2):
 		print('NOT ENOUGH ARGUMENTS GIVEN.\n')
-		print('   Usage: python extractor.py <target_dir>\n\n')
+		print('   Usage: python extractor.py <train_dir> <val_dir>\n\n')
 		sys.exit(0)
 
 	# setup logging
@@ -266,25 +320,14 @@ if __name__ == '__main__':
 	logger.addHandler(ch)
 
 
-	# generate output name
-	i = -1
-	fname = sys.argv[1].split('/')[i]
-	while len(fname) == 0:
-		i = i -1
-		fname = sys.argv[1].split('/')[i]
-
-
-	# generate output directory
-	os.system('mkdir -p ' + OUTPUT_DIR)
-
-
-	# get the fields to extract
-	logger.debug('Generating fields')
-	fields = getFields()
+	trainDir = sys.argv[1]
+	valDir = sys.argv[2]
+	baseName = getBaseName(trainDir, OUTPUT_DIR)
 
 
 	# retrieve the training data
-	train, response, nfiles = extractTrainData(sys.argv[1], OUTPUT_DIR + fname + '.csv', fields)
+	os.system('mkdir -p ' + OUTPUT_DIR)
+	train, response, nfiles = extractTrainData(trainDir, baseName + '.csv', getFields())
 	logger.info('Traversed %d files', nfiles)
 	logger.info('\t- %d completed', len(response))
 	logger.info('\t- %d successful', sum(response))
@@ -296,15 +339,18 @@ if __name__ == '__main__':
 	tt = numpy.array(train, dtype = numpy.float32)
 	rr = numpy.array(response, dtype = numpy.float32)
 
-	svm, svm_auto = trainSVM(tt, rr)
-	boost = trainBoost(tt, rr)
-	network = trainNetwork(tt, rr)
+	svm, svm_auto = trainSVM(tt, rr, baseName)
+	boost = trainBoost(tt, rr, baseName)
+	network = trainNetwork(tt, rr, baseName)
 
-	if TEST_PREDICTIONS:
-		testPredictions(svm, svm_auto, boost, network)
+	# if TEST_PREDICTIONS:
+		# testPredictions(svm, svm_auto, boost, network)
+
+	# evalModels(svm, svm_auto, boost, network, valDir)
+
 
 	# plot training data
-	plotData(tt, rr)
+	# plotData(tt, rr)
 
 
 	logger.info('Execution finished')
