@@ -29,6 +29,36 @@ CMD_UI = ['rviz:=true', 'gui:=true']
 CMD_MON = 'exec python ./src/experiment_monitor_node.py '
 ROS_APP_OUTPUT_DIR = 'output/'
 EXP_RESULTS_DIR = 'results/'
+LOG_FILENAME = EXP_RESULTS_DIR + 'runner.log'
+
+logger = None
+expProcess = None
+monitorProcess = None
+
+
+##################################################
+def sigintHandler(signal_, frame_):
+	global expProcess, monitorProcess
+	logger.info('...signal caught: ' + str(signal_))
+	
+	logger.info('...terminating monitor process')
+	monitorProcess.send_signal(signal.SIGKILL)
+	time.sleep(1)
+
+	logger.info('...terminating experiment process')
+	expProcess.send_signal(signal.SIGINT)
+	time.sleep(5)
+
+	logger.info('...copying execution results')
+	packageDir = getPackageDir()
+	resultsDest = getExpDestination()
+
+	copyResults(packageDir + ROS_APP_OUTPUT_DIR, resultsDest)
+	copyLog(resultsDest)
+
+	logger.info('...finishing execution')
+
+	sys.exit(0)
 
 
 ##################################################
@@ -94,6 +124,12 @@ def copyResults(src_, dest_):
 
 
 ##################################################
+def copyLog(dest_):
+	subprocess.call(['mkdir','-p', dest_])
+	shutil.move(LOG_FILENAME, dest_)
+
+
+##################################################
 def checkDirName(catkinDir_):
 	if (catkinDir_[len(catkinDir_) - 1] != '/'):
 		return catkinDir_ + '/'
@@ -106,8 +142,7 @@ if __name__ == '__main__':
 	formatter = logging.Formatter('[%(asctime)s][%(name)s][%(levelname)s] %(message)s', "%Y-%m-%d %H:%M:%S")
 	logger = logging.getLogger('RUNNER')
 	logger.setLevel(LOG_LEVEL)
-	logFilename = EXP_RESULTS_DIR + 'runner.log'
-	fh = logging.FileHandler(logFilename, 'w')
+	fh = logging.FileHandler(LOG_FILENAME, 'w')
 	ch = logging.StreamHandler()
 	fh.setFormatter(formatter)
 	ch.setFormatter(formatter)
@@ -118,7 +153,6 @@ if __name__ == '__main__':
 	# check the right version of python
 	if int(sys.version[0]) != 2:
 		logger.info('  ERROR: required Python v2 (>= 2.7.3)\n')
-
 	else:
 		try:
 			# check if enough args were given
@@ -126,6 +160,9 @@ if __name__ == '__main__':
 				print('\nNOT ENOUGH ARGUMENTS GIVEN.')
 				print('   Usage: python run.py <catkin_workspace> <worlds_list_file> <show_ui>\n')
 				sys.exit(0)
+
+			# set signal handler for ctrl-c events
+			signal.signal(signal.SIGINT, sigintHandler)
 
 			catkinDir = checkDirName(sys.argv[1])
 			worldsList = sys.argv[2]
@@ -215,9 +252,8 @@ if __name__ == '__main__':
 					logger.info('========================================')
 
 
-			# create the results dir in case is not already created
-			subprocess.call(['mkdir','-p', resultsDest])
-			shutil.move(logFilename, resultsDest)
+			# Copy the execution log
+			copyLog(resultsDest)
 
 
 			logger.info('*** Learning experiments execution finished ***')
