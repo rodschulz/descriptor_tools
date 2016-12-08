@@ -45,7 +45,100 @@ def getFields():
 
 
 ##################################################
-def extractTrainData(inputdir_, foutput_, csvfields_):
+def genRowCSV(dataFile_, fields_, experimentName_, setName_, csvwriter_):
+	# retrieve data
+	data = dict((e, None) for e in fields_.keys())
+	for key in fields_:
+		seq = fields_[key]
+
+		# read from YAML only the existing keys
+		if seq[0] in dataFile_:
+			node = dataFile_[seq[0]]
+			for i in range(1, len(seq)):
+				node = node[seq[i]]
+			data[key] = node
+
+	# fill additional info
+	data['experiment'] = experimentName_
+	data['set'] = setName_
+
+	# write row to csv file
+	if csvwriter_ != None:
+		csvwriter_.writerow(data)
+
+	return data
+
+
+##################################################
+def checkSplits(current_, new_):
+	if current_ == -1:
+		return new_
+	elif current_ != new_:
+		logger.warn('Multiple splits found: %d / %d', int(current_), int(new_))
+
+	return current_
+
+
+##################################################
+def traverseDirectory(input_, fields_, csvwriter_ = None):
+	data = []
+	response = []
+	nfiles = 0
+	nsplits = -1
+
+	# iterate over files in the directory
+	setName = input_.strip('/').split('/')[-1]
+	for f in os.listdir(input_):
+		element = input_ + f
+
+		if (os.path.isdir(element)):
+			logger.info('...traversing ' + f)
+			dat, resp, nf, ns = traverseDirectory(element + '/', fields_, csvwriter_)
+
+			if len(dat) > 0:
+				data = data + dat
+				response = response + resp
+				nfiles = nfiles + n
+				nsplits = checkSplits(nsplits, ns)
+
+		else:
+			# process only YAML files, skip the rest
+			if not f.split('.')[-1].lower() == 'yaml':
+				continue
+
+			logger.info('...extracting ' + f)
+			nfiles = nfiles + 1
+
+			try:
+				# open the results file
+				with open(element, 'r') as yamlFile:
+					filedata = yaml.load(yamlFile)
+					dat = genRowCSV(filedata, fields_, f, setName, csvwriter_)
+					nsplits = checkSplits(nsplits, dat['splits'])
+
+					tmp = []
+					if dat['completed']:
+						if USE_VECTOR:
+							tmp = filedata['descriptor']['data'] + [dat['angle']]
+						else:
+							tmp = [dat['cluster'], dat['angle']]
+						data = data + [tmp]
+
+						##### RESPONSE ORGANIZATION #####
+						# successful = False -> 0 -> class 0
+						# successful = True -> 1 -> class 1
+						response = response + [int(dat['successful'])] 
+
+					logger.debug('\t...extracted: ' + str(tmp))
+
+			except IOError as e:
+				logger.info('Unable to file ' + f)
+
+	return [data, response, nfiles, nsplits]
+
+
+##################################################
+def extractToCSV(inputdir_, foutput_, csvfields_):
 	try:
 		# generate a CSV file and extract training data
 		logger.debug('Opening output file')
@@ -66,91 +159,6 @@ def extractTrainData(inputdir_, foutput_, csvfields_):
 	except IOError as e:
 		logger.info('Unable to create output file')
 
-
-##################################################
-def traverseDirectory(inputdir_, fields_, csvwriter_ = None):
-	global nsplit
-
-	train = []
-	response = []
-	nfiles = 0
-
-	# iterate over files in the directory
-	for f in os.listdir(inputdir_):
-		element = inputdir_ + f
-
-		if (os.path.isdir(element)):
-			logger.info('...traversing ' + f)
-			t, r, nf = traverseDirectory(element + '/', fields_, csvwriter_)
-
-			nfiles = nfiles + nf
-			if len(t) > 0:
-				train = train + t
-				response = response + r
-
-		else:
-			# process only YAML files, skip the rest
-			if not f.split('.')[-1].lower() == 'yaml':
-				continue
-
-			nfiles = nfiles + 1
-
-			logger.info('...extracting ' + f)
-			try:
-				# generate the output CSV file
-				with open(element, 'r') as ff:
-
-					# generate dictionary for extraction
-					data = dict((e, None) for e in fields_.keys())
-
-					# perform the extraction
-					filedata = yaml.load(ff)
-					for key in fields_:
-						seq = fields_[key]
-
-						# read from YAML only the existing keys
-						if seq[0] in filedata:
-							node = filedata[seq[0]]
-							for i in range(1, len(seq)):
-								node = node[seq[i]]
-							data[key] = node
-
-					data['experiment'] = f
-					data['set'] = inputdir_.strip('/').split('/')[-1]
-
-
-					# get the number of splits from the data
-					if nsplit == None:
-						nsplit = data['splits']
-					elif nsplit != data['splits']:
-						logger.warn('Multiple splits found: %d / %d', nsplit, data['splits'])
-
-
-					# write to CSV file
-					if csvwriter_ != None:
-						csvwriter_.writerow(data)
-
-					# gen train set
-					tmp = []
-					if data['completed']:
-						if USE_VECTOR:
-							tmp = filedata['descriptor']['data'] + [data['angle']]
-						else:
-							tmp = [data['cluster'], data['angle']]
-						train = train + [tmp]
-
-						##### RESPONSE ORGANIZATION #####
-						# successful = False -> 0 -> class 0
-						# successful = True -> 1 -> class 1
-						response = response + [int(data['successful'])] 
-
-					logger.debug('\t...extracted: ' + str(tmp))
-
-			except IOError as e:
-				logger.info('Unable to file ' + f)
-
-	result = [train, response, nfiles]
-	return result
 
 
 ##################################################
@@ -324,10 +332,9 @@ if __name__ == '__main__':
 	valDir = sys.argv[2]
 	baseName = getBaseName(trainDir, OUTPUT_DIR)
 
-
 	# retrieve the training data
 	os.system('mkdir -p ' + OUTPUT_DIR)
-	train, response, nfiles = extractTrainData(trainDir, baseName + '.csv', getFields())
+	train, tresp, nfiles, nsplit = extractToCSV(trainDir, baseName + '.csv', getFields())
 	logger.info('Traversed %d files', nfiles)
 	logger.info('\t- %d completed', len(response))
 	logger.info('\t- %d successful', sum(response))
