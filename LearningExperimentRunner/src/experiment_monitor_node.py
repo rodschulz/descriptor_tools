@@ -88,16 +88,16 @@ def evalCallback(msg_):
 	if msg_.status == EvaluationStatus.BEFORE_EVAL:
 		if not SCREENSHOT_BEFORE:
 			return
-		sufix = '_BEFORE'
+		sufix = '_prev'
 
 	elif msg_.status == EvaluationStatus.PERFORMING_NEW_EVAL:
-		sufix = '_EVAL_' + str(evalIdx)
+		sufix = '_eval_' + str(evalIdx)
 		evalIdx = evalIdx + 1
 		if not SCREENSHOT_EVAL or evalIdx > evalMaxIdx:
 			return
 
 	elif msg_.status == EvaluationStatus.AFTER_EVAL:
-		sufix = '_AFTER'
+		sufix = '_post'
 		evalIdx = 0
 		if not SCREENSHOT_AFTER:
 			return

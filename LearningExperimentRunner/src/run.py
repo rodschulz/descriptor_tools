@@ -160,7 +160,6 @@ if __name__ == '__main__':
 
 
 					for k in range(1):
-
 						# clear the log folder before every experiment
 						loggingPath = os.path.expanduser('~/.ros/log/')
 						if os.path.exists(loggingPath):
