@@ -3,6 +3,7 @@
 *.log
 clusters*
 proj/*
+ClassifierTrainer/build/*
 FileCrawler/crawled_files
 DenseEvaluatorRunner/results/*
 DenseEvaluatorRunner/cloud_set*
