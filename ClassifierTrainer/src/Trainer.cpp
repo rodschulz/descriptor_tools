@@ -23,6 +23,7 @@ typedef boost::shared_ptr<cv::Boost> BoostingPtr;
 typedef boost::shared_ptr<cv::NeuralNet_MLP> NeuralNetworkPtr;
 
 
+/**************************************************/
 void loadFromFile(const YAML::Node file_,
 				  std::vector<std::string> &csv_,
 				  std::vector<std::vector<float> > &data_,
@@ -50,6 +51,7 @@ void loadFromFile(const YAML::Node file_,
 	}
 }
 
+/**************************************************/
 int extractData(const std::string &directory_,
 				std::vector<std::vector<std::string> > &csv_,
 				std::vector<std::vector<float> > &data_,
@@ -89,6 +91,7 @@ int extractData(const std::string &directory_,
 	return successfull;
 }
 
+/**************************************************/
 void prepareData(const std::vector<std::vector<float> > &data_,
 				 const std::vector<float> &resp_,
 				 cv::Mat &cvData_,
@@ -115,6 +118,7 @@ void prepareData(const std::vector<std::vector<float> > &data_,
 		cvResp_.at<float>(i, 0) = resp_[i];
 }
 
+/**************************************************/
 SVMPtr trainSVM(const cv::Mat &data_,
 				const cv::Mat &resp_)
 {
@@ -125,10 +129,11 @@ SVMPtr trainSVM(const cv::Mat &data_,
 	svmParams.C = 100;
 	svmParams.gamma = 2;
 
-	cv::Mat weights = cv::Mat::zeros(2, 1, CV_32FC1);
-	weights.at<float>(0, 0) = 0.9;
-	weights.at<float>(1, 0) = 0.1;
-	// svmParams.class_weights = &weights.CvMat();
+	cv::Mat aux = cv::Mat::zeros(2, 1, CV_32FC1);
+	aux.at<float>(0, 0) = 1;
+	aux.at<float>(1, 0) = 1 / 0.303;
+	CvMat weights = cvMat(2, 1, CV_32FC1, aux.data);
+	svmParams.class_weights = &weights;
 
 	// Train the SVM
 	SVMPtr svm = SVMPtr(new cv::SVM());
@@ -138,77 +143,160 @@ SVMPtr trainSVM(const cv::Mat &data_,
 	return svm;
 }
 
+/**************************************************/
+void countCases(const cv::Mat &out_,
+				const cv::Mat &resp_,
+				int &tp_,
+				int &tn_,
+				int &fp_,
+				int &fn_)
+{
+	for (int i = 0; i < out_.rows; i++)
+	{
+		int prediction = out_.at<float>(i);
+		int response = resp_.at<float>(i);
+		if (prediction == 0)
+		{
+			if (response == 0)
+				tn_++;
+			else // response == 1
+				fn_++;
+		}
+		else // prediction == 1
+		{
+			if (response == 1)
+				tp_++;
+			else // response == 0
+				fp_++;
+		}
+	}
+}
+
+/**************************************************/
 void evalClassifier(const ModelPtr &model_,
-					const cv::Mat &data_,
-					const cv::Mat &resp_)
+					const cv::Mat &tdata_,
+					const cv::Mat &tresp_,
+					const cv::Mat &vdata_,
+					const cv::Mat &vresp_)
 {
 	bool isSVM = dynamic_cast<cv::SVM *>(model_.get()) != NULL;
 	bool isBoost = dynamic_cast<cv::Boost *>(model_.get()) != NULL;
 	bool isNetwork = dynamic_cast<cv::NeuralNet_MLP *>(model_.get()) != NULL;
 
 
-	cv::Mat output;
+	cv::Mat tout, vout;
 	if (isSVM)
 	{
 		LOGD << "Predicting with SVM";
 		cv::SVM *svm = dynamic_cast<cv::SVM *>(model_.get());
-		svm->predict(data_, output);
+		svm->predict(tdata_, tout);
+		svm->predict(vdata_, vout);
 	}
-	if (isBoost)
+	else if (isBoost)
 	{
 		LOGD << "Predicting with Boost";
 		cv::Boost *boost = dynamic_cast<cv::Boost *>(model_.get());
-		boost->predict(data_, output);
+		boost->predict(tdata_, tout);
 	}
-	if (isNetwork)
+	else if (isNetwork)
 	{
 		LOGD << "Predicting with Neural Network";
 		cv::NeuralNet_MLP *network = dynamic_cast<cv::NeuralNet_MLP *>(model_.get());
-		network->predict(data_, output);
+		network->predict(tdata_, tout);
 	}
 
 
-	int tp = 0, tn = 0, fp = 0, fn = 0;
-	for (int i = 0; i < output.rows; i++)
-	{
-		int prediction = output.at<float>(i);
-		int response = resp_.at<float>(i);
-		if (prediction == 0)
-		{
-			if (response == 0)
-				tn++;
-			else
-				fn++;
-		}
-		else
-		{
-			if (response == 1)
-				tp++;
-			else
-				fp++;
-		}
-	}
-	int realn = tn + fp;
-	int realp = fn + tp;
-	int total = realn + realp;
+	int t_tp = 0, t_tn = 0, t_fp = 0, t_fn = 0;
+	countCases(tout, tresp_, t_tp, t_tn, t_fp, t_fn);
+	int t_realn = t_tn + t_fp;
+	int t_realp = t_fn + t_tp;
+	int t_total = t_realn + t_realp;
 
 
+	int v_tp = 0, v_tn = 0, v_fp = 0, v_fn = 0;
+	countCases(vout, vresp_, v_tp, v_tn, v_fp, v_fn);
+	int v_realn = v_tn + v_fp;
+	int v_realp = v_fn + v_tp;
+	int v_total = v_realn + v_realp;
+
+
+	boost::format fd = boost::format("%3d");
+	std::vector<std::string> table;
+	table.push_back("----------------------------------------------------------------");
+	table.push_back("|         |          TRAIN          ||       VALIDATION        |");
+	table.push_back("----------------------------------------------------------------");
+	table.push_back("|         | pred: 0 | pred: 1 | SUM || pred: 0 | pred: 1 | SUM |");
+	table.push_back("----------------------------------------------------------------");
+	table.push_back("| resp: 0 |   "
+					+ boost::str(fd % t_tn) + "   |   "
+					+ boost::str(fd % t_fp) + "   | "
+					+ boost::str(fd % t_realn) + " ||   "
+					+ boost::str(fd % v_tn) + "   |   "
+					+ boost::str(fd % v_fp) + "   | "
+					+ boost::str(fd % v_realn) + " |");
+	table.push_back("| resp: 1 |   "
+					+ boost::str(fd % t_fn) + "   |   "
+					+ boost::str(fd % t_tp) + "   | "
+					+ boost::str(fd % t_realp) + " ||   "
+					+ boost::str(fd % v_fn) + "   |   "
+					+ boost::str(fd % v_tp) + "   | "
+					+ boost::str(fd % v_realp) + " |");
+	table.push_back("----------------------------------------------------------------");
+	table.push_back("|   SUM   |   "
+					+ boost::str(fd % (t_tn + t_fn)) + "   |   "
+					+ boost::str(fd % (t_tp + t_fp)) + "   | "
+					+ boost::str(fd % t_total) + " ||   "
+					+ boost::str(fd % (v_tn + v_fn)) + "   |   "
+					+ boost::str(fd % (v_tp + v_fp)) + "   | "
+					+ boost::str(fd % v_total) + " |");
+	table.push_back("----------------------------------------------------------------");
+
+
+	std::string sp = "\t  ";
 	boost::format ff = boost::format("%.3f");
-	std::ostringstream table;
-	table << "\n";
-	table << "-------------------------------------" << "\taccuracy\t: " << ff % (float(tp + tn) / float(total)) << "\n";
-	table << "|         | pred: 0 | pred: 1 | SUM |" << "\tmissclass\t: " << ff % (float(fp + fn) / float(total)) << "\n";
-	table << "-------------------------------------" << "\tTPR\t\t: " << ff % (float(tp) / float(realp)) << "\n";
-	table << "| resp: 0 |   " << boost::format("%3d") % tn << "   |   " << boost::format("%3d") % fp << "   | " << boost::format("%3d") % realn << " |" << "\tFPR\t\t: " << ff % (float(fp) / float(realn)) << "\n";
-	table << "| resp: 1 |   " << boost::format("%3d") % fn << "   |   " << boost::format("%3d") % tp << "   | " << boost::format("%3d") % realp << " |" << "\tspecificity\t: " << ff % (float(tn) / float(realn)) << "\n";
-	table << "-------------------------------------" << "\tprecision\t: " << ff % (float(tp) / float(tp + fp)) << "\n";
-	table << "|   SUM   |   " << boost::format("%3d") % (tn + fn) << "   |   " << boost::format("%3d") % (fp + tp) << "   | " << boost::format("%3d") % total << " |" << "\tprevalence\t: " << ff % (float(realp) / float(total)) << "\n";
-	table << "-------------------------------------";
+	std::vector<std::string> stats;
+	stats.push_back("\t\t  TRAIN" + sp + " VAL");
+	stats.push_back("Accuracy\t: "
+					+ boost::str(ff % (float(t_tp + t_tn) / t_total)) + sp
+					+ boost::str(ff % (float(v_tp + v_tn) / v_total)));
+	stats.push_back("Missclass\t: "
+					+ boost::str(ff % (float(t_fp + t_fn) / t_total)) + sp
+					+ boost::str(ff % (float(v_fp + v_fn) / v_total)));
+	stats.push_back("TPR\t\t: "
+					+ boost::str(ff % (float(t_tp) / t_realp)) + sp
+					+ boost::str(ff % (float(v_tp) / v_realp)));
+	stats.push_back("FPR\t\t: "
+					+ boost::str(ff % (float(t_fp) / t_realn)) + sp
+					+ boost::str(ff % (float(v_fp) / v_realn)));
+	stats.push_back("Specificity\t: "
+					+ boost::str(ff % (float(t_tn) / t_realn)) + sp
+					+ boost::str(ff % (float(v_tn) / v_realn)));
+	stats.push_back("Precision\t: "
+					+ boost::str(ff % (float(t_tp) / (t_tp + t_fp))) + sp
+					+ boost::str(ff % (float(v_tp) / (v_tp + v_fp))));
+	stats.push_back("Prevalence\t: "
+					+ boost::str(ff % (float(t_realp) / t_total)) + sp
+					+ boost::str(ff % (float(v_realp) / v_total)));
 
-	LOGI << table.str();
+
+	size_t tableSize = table.size();
+	size_t statsSize = stats.size();
+	size_t len = std::max(tableSize, statsSize);
+	std::stringstream ss;
+	ss << "\n";
+	for (size_t i = 0; i < len; i++)
+	{
+		if (i < tableSize)
+			ss << table[i];
+		if (i < statsSize)
+			ss << "\t" << stats[i];
+		ss << "\n";
+	}
+
+	LOGI << ss.str();
 }
 
-
+/**************************************************/
 int main(int _argn, char **_argv)
 {
 	static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
@@ -219,29 +307,52 @@ int main(int _argn, char **_argv)
 	try
 	{
 		// Check if enough arguments were given
-		if (_argn < 2)
-			throw std::runtime_error("Not enough params given\n\tUsage: Trainer <train_dir>");
+		if (_argn < 3)
+			throw std::runtime_error("Not enough params given\n\tUsage: Trainer <train_dir> <val_dir>");
 		std::string trainDir = _argv[1];
+		std::string valDir = _argv[2];
 		LOGI << "START!";
 
 
-		LOGI << "Extracting train data";
+		LOGI << "=== Extracting train data ===";
 		std::vector<std::vector<std::string> > tcsv;
 		std::vector<std::vector<float> > train;
 		std::vector<float> tresp;
-		int successful = extractData(trainDir, tcsv, train, tresp);
+		int tsuccessful = extractData(trainDir, tcsv, train, tresp);
+		float tratio = tsuccessful / float(train.size());
 
 		LOGI << "Traversed " << tcsv.size() << " files";
-		LOGI << "\t- completed: " << train.size();
-		LOGI << "\t- successful: " << successful;
-		LOGI << "\t- ratio:: " << float(successful) / float(train.size());
+		LOGI << "\t  - completed\t: " << train.size();
+		LOGI << "\t  - successful\t: " << tsuccessful;
+		LOGI << "\t  - ratio\t: " << tratio;
 
 
+		LOGI << "=== Extracting validation data ===";
+		std::vector<std::vector<std::string> > vcsv;
+		std::vector<std::vector<float> > val;
+		std::vector<float> vresp;
+		int vsuccessful = extractData(valDir, vcsv, val, vresp);
+		float vratio = vsuccessful / float(val.size());
+
+		LOGI << "Traversed " << vcsv.size() << " files";
+		LOGI << "\t  - completed\t: " << val.size();
+		LOGI << "\t  - successful\t: " << vsuccessful;
+		LOGI << "\t  - ratio\t: " << vratio;
+
+
+		LOGI << "Preparing data";
 		cv::Mat tdmat, trmat;
 		prepareData(train, tresp, tdmat, trmat);
+		cv::Mat vdmat, vrmat;
+		prepareData(val, vresp, vdmat, vrmat);
 
+
+		LOGI << "Training classifiers";
 		SVMPtr svm = trainSVM(tdmat, trmat);
-		evalClassifier(svm, tdmat, trmat);
+
+
+		LOGI << "*** Evaluating SVM ***";
+		evalClassifier(svm, tdmat, trmat, vdmat, vrmat);
 	}
 	catch (std::exception &_ex)
 	{
