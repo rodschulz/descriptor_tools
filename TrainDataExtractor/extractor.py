@@ -254,7 +254,7 @@ def evalClassifier(classifier_, data_, resp_, showMatrix_ = True, showStats_ = T
 
 		elif isnet:
 			dummy, out = classifier_.predict(sample)
-			pred = int(out < 0)
+			pred = int(out > 0)
 			logger.debug('resp: %d - out: % .3f', resp_[i], out)
 
 		# accumulate stats

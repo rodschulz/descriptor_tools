@@ -120,27 +120,83 @@ void prepareData(const std::vector<std::vector<float> > &data_,
 
 /**************************************************/
 SVMPtr trainSVM(const cv::Mat &data_,
-				const cv::Mat &resp_)
+				const cv::Mat &resp_,
+				const float ratio_,
+				const bool auto_ = false)
 {
-	cv::SVMParams svmParams;
-	svmParams.kernel_type = cv::SVM::RBF;
-	svmParams.svm_type = cv::SVM::C_SVC;
-	svmParams.term_crit = cvTermCriteria(CV_TERMCRIT_ITER + CV_TERMCRIT_EPS, 10000, 1e-10);
-	svmParams.C = 100;
-	svmParams.gamma = 2;
+	cv::SVMParams params;
+	params.kernel_type = cv::SVM::RBF;
+	params.svm_type = cv::SVM::C_SVC;
+	params.term_crit = cvTermCriteria(CV_TERMCRIT_ITER + CV_TERMCRIT_EPS, 10000, 1e-10);
+	params.C = 100;
+	params.gamma = 2;
 
-	cv::Mat aux = cv::Mat::zeros(2, 1, CV_32FC1);
-	aux.at<float>(0, 0) = 1;
-	aux.at<float>(1, 0) = 1 / 0.303;
-	CvMat weights = cvMat(2, 1, CV_32FC1, aux.data);
-	svmParams.class_weights = &weights;
+	// cv::Mat aux = cv::Mat::zeros(2, 1, CV_32FC1);
+	// aux.at<float>(0, 0) = 1;
+	// aux.at<float>(1, 0) = 1 / 0.303;
+	// CvMat weights = cvMat(2, 1, CV_32FC1, aux.data);
+	// params.class_weights = &weights;
 
-	// Train the SVM
+
 	SVMPtr svm = SVMPtr(new cv::SVM());
-	svm->train(data_, resp_, cv::Mat(), cv::Mat(), svmParams);
-	// svm->train_auto(data_, resp_, cv::Mat(), cv::Mat(), svmParams);
+	if (!auto_)
+		svm->train(data_, resp_, cv::Mat(), cv::Mat(), params);
+	else
+		svm->train_auto(data_, resp_, cv::Mat(), cv::Mat(), params);
 
 	return svm;
+}
+
+/**************************************************/
+BoostingPtr trainBoost(const cv::Mat &data_,
+					   const cv::Mat &resp_,
+					   const float ratio_)
+{
+	cv::BoostParams params;
+	params.boost_type = CvBoost::REAL;
+	params.weak_count = 100;
+	params.weight_trim_rate = 0.95;
+	params.cv_folds = 3;
+	params.max_depth = 1;
+
+
+	BoostingPtr boost = BoostingPtr(new cv::Boost());
+	boost->train(data_, CV_ROW_SAMPLE, resp_, cv::Mat(), cv::Mat(), cv::Mat(), cv::Mat(), params);
+
+	return boost;
+}
+
+/**************************************************/
+NeuralNetworkPtr trainNetwork(const cv::Mat &data_,
+							  const cv::Mat &resp_,
+							  const float ratio_)
+{
+	cv::ANN_MLP_TrainParams params;
+	params.term_crit = cvTermCriteria(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 5000, 1e-6);
+	params.train_method = cv::ANN_MLP_TrainParams::BACKPROP;
+
+	// Back propagation params
+	params.bp_dw_scale = 0.1;
+	params.bp_moment_scale = 0.1;
+
+	// R propagation params
+	params.rp_dw0 = 0.1;
+	params.rp_dw_plus = 1.2;
+	params.rp_dw_minus = 0.5;
+	params.rp_dw_min = 0.1;
+	params.rp_dw_max = 50;
+
+
+	cv::Mat layers = cv::Mat::zeros(3, 1, CV_32SC1);
+	layers.at<int>(0) = data_.cols;
+	layers.at<int>(1) = 5;
+	layers.at<int>(2) = 1;
+	NeuralNetworkPtr network = NeuralNetworkPtr(new cv::NeuralNet_MLP());
+	network->create(layers, cv::NeuralNet_MLP::SIGMOID_SYM, 1, 1);
+
+	network->train(data_, resp_, cv::Mat(), cv::Mat(), params);
+
+	return network;
 }
 
 /**************************************************/
@@ -189,6 +245,7 @@ void evalClassifier(const ModelPtr &model_,
 	{
 		LOGD << "Predicting with SVM";
 		cv::SVM *svm = dynamic_cast<cv::SVM *>(model_.get());
+
 		svm->predict(tdata_, tout);
 		svm->predict(vdata_, vout);
 	}
@@ -196,13 +253,27 @@ void evalClassifier(const ModelPtr &model_,
 	{
 		LOGD << "Predicting with Boost";
 		cv::Boost *boost = dynamic_cast<cv::Boost *>(model_.get());
-		boost->predict(tdata_, tout);
+
+		tout = cv::Mat::zeros(tdata_.rows, 1, CV_32FC1);
+		for (int i = 0; i < tdata_.rows; i++)
+			tout.at<float>(i, 0) = boost->predict(tdata_.row(i));
+
+		vout = cv::Mat::zeros(vdata_.rows, 1, CV_32FC1);
+		for (int i = 0; i < vdata_.rows; i++)
+			vout.at<float>(i, 0) = boost->predict(vdata_.row(i));
 	}
 	else if (isNetwork)
 	{
 		LOGD << "Predicting with Neural Network";
 		cv::NeuralNet_MLP *network = dynamic_cast<cv::NeuralNet_MLP *>(model_.get());
+
 		network->predict(tdata_, tout);
+		for (int i = 0; i < tout.rows; i++)
+			tout.at<float>(i, 0) = tout.at<float>(i, 0) > 0 ? 1 : 0;
+
+		network->predict(vdata_, vout);
+		for (int i = 0; i < vout.rows; i++)
+			vout.at<float>(i, 0) = vout.at<float>(i, 0) > 0 ? 1 : 0;
 	}
 
 
@@ -348,11 +419,20 @@ int main(int _argn, char **_argv)
 
 
 		LOGI << "Training classifiers";
-		SVMPtr svm = trainSVM(tdmat, trmat);
+		SVMPtr svm = trainSVM(tdmat, trmat, tratio);
+		SVMPtr svm_auto = trainSVM(tdmat, trmat, tratio, true);
+		BoostingPtr boost = trainBoost(tdmat, trmat, tratio);
+		NeuralNetworkPtr network = trainNetwork(tdmat, trmat, tratio);
 
 
 		LOGI << "*** Evaluating SVM ***";
 		evalClassifier(svm, tdmat, trmat, vdmat, vrmat);
+		LOGI << "*** Evaluating SVM-auto ***";
+		evalClassifier(svm_auto, tdmat, trmat, vdmat, vrmat);
+		LOGI << "*** Evaluating Boost ***";
+		evalClassifier(boost, tdmat, trmat, vdmat, vrmat);
+		LOGI << "*** Evaluating Network ***";
+		evalClassifier(network, tdmat, trmat, vdmat, vrmat);
 	}
 	catch (std::exception &_ex)
 	{
