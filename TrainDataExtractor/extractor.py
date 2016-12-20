@@ -402,6 +402,7 @@ if __name__ == '__main__':
 
 
 	# retrieve validation data
+	logger.info('====================================================')
 	logger.info('Retrieving validation data')
 	val, vresp, nfiles, dummy = traverseDirectory(valDir, getFields())
 	logger.info('Traversed %d files', nfiles)

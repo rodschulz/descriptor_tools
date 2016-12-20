@@ -1,6 +1,7 @@
 *.~lock*
 *.pyc
 *.log
+*.tar.gz
 clusters*
 proj/*
 ClassifierTrainer/build/*
