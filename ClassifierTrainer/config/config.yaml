@@ -1,0 +1,47 @@
+---
+useWeights: true
+
+trainSVM: true
+trainBoost: false
+trainNetwork: false
+
+##############################
+svm:
+  svm_type: 100 #C_SVC=100, NU_SVC=101, ONE_CLASS=102, EPS_SVR=103, NU_SVR=104
+  kernel_type: 2 # LINEAR=0, POLY=1, RBF=2, SIGMOID=3
+  degree: 2
+  gamma: 2
+  coef0: 0
+
+  C: 100
+  nu: 100
+  p: 1
+
+##############################
+boost:
+  boost_type: 0 # DISCRETE=0, REAL=1, LOGIT=2, GENTLE=3
+  weak_count: 30
+  split_criteria: 3 # DEFAULT=0, GINI=1, MISCLASS=3, SQERR=4
+  weight_trim_rate: 0.95
+  cv_folds: 5
+
+##############################
+network:
+  train_method: 1 # BACKPROP=0, RPROP=1
+
+  # back propagation params
+  bp_dw_scale: 0.1
+  bp_moment_scale: 0.1
+
+  # r propagation params
+  rp_dw0: 0.1
+  rp_dw_plus: 1.2
+  rp_dw_minus: 0.5
+  rp_dw_min: 0.1
+  rp_dw_max: 50
+
+  layers: [5]
+  activate_fn: 1 #IDENTITY = 0, SIGMOID_SYM = 1, GAUSSIAN = 2
+  alpha: 1
+  beta: 1
+...

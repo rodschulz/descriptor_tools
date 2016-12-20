@@ -14,14 +14,19 @@
 #include <opencv2/ml/ml.hpp>
 
 
-#define LOGGING_LOCATION	"./logging.yaml"
 #define OUTPUT_DIR			"./output/"
+#define CONFIG_DIR			"./config/"
+#define LOGGING_LOCATION	CONFIG_DIR "logging.yaml"
+#define CONFIG_LOCATION		CONFIG_DIR "config.yaml"
 
 
 typedef boost::shared_ptr<cv::StatModel> ModelPtr;
 typedef boost::shared_ptr<cv::SVM> SVMPtr;
 typedef boost::shared_ptr<cv::Boost> BoostingPtr;
 typedef boost::shared_ptr<cv::NeuralNet_MLP> NeuralNetworkPtr;
+
+
+YAML::Node config;
 
 
 /**************************************************/
@@ -123,20 +128,31 @@ void prepareData(const std::vector<std::vector<float> > &data_,
 SVMPtr trainSVM(const cv::Mat &data_,
 				const cv::Mat &resp_,
 				const float ratio_,
+				const bool useWeights_,
 				const bool auto_ = false)
 {
 	cv::SVMParams params;
-	params.kernel_type = cv::SVM::RBF;
-	params.svm_type = cv::SVM::C_SVC;
-	params.term_crit = cvTermCriteria(CV_TERMCRIT_ITER + CV_TERMCRIT_EPS, 10000, 1e-10);
-	params.C = 100;
-	params.gamma = 2;
+	params.svm_type = config["svm"]["svm_type"].as<int>();
+	params.kernel_type = config["svm"]["kernel_type"].as<int>();
+	params.degree = config["svm"]["degree"].as<float>();
+	params.gamma = config["svm"]["gamma"].as<float>();
+	params.coef0 = config["svm"]["coef0"].as<float>();
 
-	// cv::Mat aux = cv::Mat::zeros(2, 1, CV_32FC1);
-	// aux.at<float>(0, 0) = 1;
-	// aux.at<float>(1, 0) = 1 / 0.303;
-	// CvMat weights = cvMat(2, 1, CV_32FC1, aux.data);
-	// params.class_weights = &weights;
+	params.C = config["svm"]["C"].as<float>();
+	params.nu = config["svm"]["nu"].as<float>();
+	params.p = config["svm"]["p"].as<float>();
+
+	params.term_crit = cvTermCriteria(CV_TERMCRIT_ITER + CV_TERMCRIT_EPS, 10000, 1e-10);
+
+
+	if (useWeights_)
+	{
+		cv::Mat aux = cv::Mat::zeros(2, 1, CV_32FC1);
+		aux.at<float>(0, 0) = 0.5 / (1 - ratio_);
+		aux.at<float>(1, 0) = 0.5 / ratio_;
+		CvMat weights = cvMat(2, 1, CV_32FC1, aux.data);
+		params.class_weights = &weights;
+	}
 
 
 	SVMPtr svm = SVMPtr(new cv::SVM());
@@ -154,11 +170,11 @@ BoostingPtr trainBoost(const cv::Mat &data_,
 					   const float ratio_)
 {
 	cv::BoostParams params;
-	params.boost_type = CvBoost::REAL;
-	params.weak_count = 100;
-	params.weight_trim_rate = 0.95;
-	params.cv_folds = 3;
-	params.max_depth = 1;
+	params.boost_type = config["boost"]["boost_type"].as<int>();
+	params.weak_count = config["boost"]["weak_count"].as<int>();
+	params.split_criteria = config["boost"]["split_criteria"].as<int>();
+	params.weight_trim_rate = config["boost"]["weight_trim_rate"].as<float>();
+	params.cv_folds = config["boost"]["cv_folds"].as<int>();
 
 
 	BoostingPtr boost = BoostingPtr(new cv::Boost());
@@ -170,32 +186,56 @@ BoostingPtr trainBoost(const cv::Mat &data_,
 /**************************************************/
 NeuralNetworkPtr trainNetwork(const cv::Mat &data_,
 							  const cv::Mat &resp_,
-							  const float ratio_)
+							  const float ratio_,
+							  const bool useWeights_)
 {
 	cv::ANN_MLP_TrainParams params;
-	params.term_crit = cvTermCriteria(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 5000, 1e-6);
-	params.train_method = cv::ANN_MLP_TrainParams::BACKPROP;
+	params.term_crit = cvTermCriteria(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 10000, 1e-6);
+	params.train_method = config["network"]["train_method"].as<int>();
 
 	// Back propagation params
-	params.bp_dw_scale = 0.1;
-	params.bp_moment_scale = 0.1;
+	params.bp_dw_scale = config["network"]["bp_dw_scale"].as<float>();
+	params.bp_moment_scale = config["network"]["bp_moment_scale"].as<float>();
 
 	// R propagation params
-	params.rp_dw0 = 0.1;
-	params.rp_dw_plus = 1.2;
-	params.rp_dw_minus = 0.5;
-	params.rp_dw_min = 0.1;
-	params.rp_dw_max = 50;
+	params.rp_dw0 = config["network"]["rp_dw0"].as<float>();
+	params.rp_dw_plus = config["network"]["rp_dw_plus"].as<float>();
+	params.rp_dw_minus = config["network"]["rp_dw_minus"].as<float>();
+	params.rp_dw_min = config["network"]["rp_dw_min"].as<float>();
+	params.rp_dw_max = config["network"]["rp_dw_max"].as<float>();
 
 
-	cv::Mat layers = cv::Mat::zeros(3, 1, CV_32SC1);
-	layers.at<int>(0) = data_.cols;
-	layers.at<int>(1) = 5;
-	layers.at<int>(2) = 1;
+	std::vector<int> l = config["network"]["layers"].as<std::vector<int> >();
+	cv::Mat layers = cv::Mat::zeros(1 + l.size() + 1, 1, CV_32SC1);
+
+	size_t i = 0;
+	layers.at<int>(i++) = data_.cols;
+	for (; i - 1 < l.size(); i++)
+		layers.at<int>(i) = l[i - 1];
+	layers.at<int>(i) = 1;
 	NeuralNetworkPtr network = NeuralNetworkPtr(new cv::NeuralNet_MLP());
-	network->create(layers, cv::NeuralNet_MLP::SIGMOID_SYM, 1, 1);
 
-	network->train(data_, resp_, cv::Mat(), cv::Mat(), params);
+	int activate_fn = config["network"]["activate_fn"].as<int>();
+	float alpha = config["network"]["alpha"].as<float>();
+	float beta = config["network"]["beta"].as<float>();
+	network->create(layers, activate_fn, alpha, beta);
+
+
+	cv::Mat weights;
+	// if (params.train_method == cv::ANN_MLP_TrainParams::RPROP)
+	// {
+	// 	weights = cv::Mat::zeros(resp_.rows, 1, CV_32FC1);
+	// 	for (int i = 0; i < resp_.rows; i++)
+	// 	{
+	// 		float label = resp_.at<float>(i, 0);
+	// 		// weights.at<float>(i, 0) = fabs(label - 1) < 1e-7 ? (0.5 / ratio_) : (0.5 / (1 - ratio_));
+	// 		weights.at<float>(i, 0) = fabs(label - 1) < 1e-7 ? (0.5 / ratio_) : 1;
+	// 		LOGI << resp_.at<float>(i, 0) << " -- " << weights.at<float>(i, 0);
+	// 	}
+	// }
+
+
+	network->train(data_, resp_, weights, cv::Mat(), params);
 
 	return network;
 }
@@ -324,31 +364,38 @@ void evalClassifier(const ModelPtr &model_,
 	table.push_back("----------------------------------------------------------------");
 
 
-	std::string sp = "\t  ";
+	std::string sp = "  ";
 	boost::format ff = boost::format("%.3f");
 	std::vector<std::string> stats;
 	stats.push_back("\t\t  TRAIN" + sp + " VAL");
 	stats.push_back("Accuracy\t: "
 					+ boost::str(ff % (float(t_tp + t_tn) / t_total)) + sp
-					+ boost::str(ff % (float(v_tp + v_tn) / v_total)));
-	stats.push_back("Missclass\t: "
+					+ boost::str(ff % (float(v_tp + v_tn) / v_total))
+					+ "  [tp + tn / total]");
+	stats.push_back("Miss\t: "
 					+ boost::str(ff % (float(t_fp + t_fn) / t_total)) + sp
-					+ boost::str(ff % (float(v_fp + v_fn) / v_total)));
-	stats.push_back("TPR\t\t: "
+					+ boost::str(ff % (float(v_fp + v_fn) / v_total))
+					+ "  [fp + fn / total]");
+	stats.push_back("TP rate\t: "
 					+ boost::str(ff % (float(t_tp) / t_realp)) + sp
-					+ boost::str(ff % (float(v_tp) / v_realp)));
-	stats.push_back("FPR\t\t: "
+					+ boost::str(ff % (float(v_tp) / v_realp))
+					+ "  [tp / realp]");
+	stats.push_back("FP rate\t: "
 					+ boost::str(ff % (float(t_fp) / t_realn)) + sp
-					+ boost::str(ff % (float(v_fp) / v_realn)));
+					+ boost::str(ff % (float(v_fp) / v_realn))
+					+ "  [fp / realn]");
 	stats.push_back("Specificity\t: "
 					+ boost::str(ff % (float(t_tn) / t_realn)) + sp
-					+ boost::str(ff % (float(v_tn) / v_realn)));
+					+ boost::str(ff % (float(v_tn) / v_realn))
+					+ "  [tn / realn]");
 	stats.push_back("Precision\t: "
 					+ boost::str(ff % (float(t_tp) / (t_tp + t_fp))) + sp
-					+ boost::str(ff % (float(v_tp) / (v_tp + v_fp))));
+					+ boost::str(ff % (float(v_tp) / (v_tp + v_fp)))
+					+ "  [tp / tp + fp]");
 	stats.push_back("Prevalence\t: "
 					+ boost::str(ff % (float(t_realp) / t_total)) + sp
-					+ boost::str(ff % (float(v_realp) / v_total)));
+					+ boost::str(ff % (float(v_realp) / v_total))
+					+ "  [realp / total]");
 
 
 	size_t tableSize = table.size();
@@ -361,7 +408,7 @@ void evalClassifier(const ModelPtr &model_,
 		if (i < tableSize)
 			ss << table[i];
 		if (i < statsSize)
-			ss << "\t" << stats[i];
+			ss << "    " << stats[i];
 		ss << "\n";
 	}
 
@@ -400,7 +447,15 @@ int main(int _argn, char **_argv)
 			throw std::runtime_error("Not enough params given\n\tUsage: Trainer <train_dir> <val_dir>");
 		std::string trainDir = _argv[1];
 		std::string valDir = _argv[2];
+
 		LOGI << "START!";
+		config = YAML::LoadFile(CONFIG_LOCATION);
+		bool useWeights = config["useWeights"].as<bool>();
+
+
+		if (system("mkdir -p " OUTPUT_DIR) != 0)
+			throw std::runtime_error("Can't create output directory");
+		std::string id = getId(trainDir);
 
 
 		LOGI << "=== Extracting train data ===";
@@ -436,32 +491,45 @@ int main(int _argn, char **_argv)
 		prepareData(val, vresp, vdmat, vrmat);
 
 
-		LOGI << "Training classifiers";
-		SVMPtr svm = trainSVM(tdmat, trmat, tratio);
-		SVMPtr svm_auto = trainSVM(tdmat, trmat, tratio, true);
-		BoostingPtr boost = trainBoost(tdmat, trmat, tratio);
-		NeuralNetworkPtr network = trainNetwork(tdmat, trmat, tratio);
+		if (config["trainSVM"].as<bool>())
+		{
+			LOGI << "*** Training SVM ***";
+			SVMPtr svm = trainSVM(tdmat, trmat, tratio, useWeights);
+			SVMPtr svm_auto = trainSVM(tdmat, trmat, tratio, useWeights, true);
+
+			LOGI << "Evaluating SVM";
+			evalClassifier(svm, tdmat, trmat, vdmat, vrmat);
+			LOGI << "Evaluating SVM-auto";
+			evalClassifier(svm_auto, tdmat, trmat, vdmat, vrmat);
+
+			svm->save((OUTPUT_DIR + id + "_svm.yaml").c_str());
+			svm_auto->save((OUTPUT_DIR  + id + "_svm_auto.yaml").c_str());
+		}
 
 
-		LOGI << "*** Evaluating SVM ***";
-		evalClassifier(svm, tdmat, trmat, vdmat, vrmat);
-		LOGI << "*** Evaluating SVM-auto ***";
-		evalClassifier(svm_auto, tdmat, trmat, vdmat, vrmat);
-		LOGI << "*** Evaluating Boost ***";
-		evalClassifier(boost, tdmat, trmat, vdmat, vrmat);
-		LOGI << "*** Evaluating Network ***";
-		evalClassifier(network, tdmat, trmat, vdmat, vrmat);
+		if (config["trainBoost"].as<bool>())
+		{
+			LOGI << "*** Training Boost ***";
+			BoostingPtr boost = trainBoost(tdmat, trmat, tratio);
+			SVMPtr svm_auto = trainSVM(tdmat, trmat, tratio, useWeights, true);
+
+			LOGI << "Evaluating Boost";
+			evalClassifier(boost, tdmat, trmat, vdmat, vrmat);
+
+			boost->save((OUTPUT_DIR  + id + "_boost.yaml").c_str());
+		}
 
 
-		LOGI << "Saving classifiers to disk";
-		if (system("mkdir -p " OUTPUT_DIR) != 0)
-			throw std::runtime_error("Can't create output directory");
+		if (config["trainNetwork"].as<bool>())
+		{
+			LOGI << "*** Training Network ***";
+			NeuralNetworkPtr network = trainNetwork(tdmat, trmat, tratio, useWeights);
 
-		std::string id = getId(trainDir);
-		svm->save((OUTPUT_DIR + id + "_svm.yaml").c_str());
-		svm_auto->save((OUTPUT_DIR  + id + "_svm_auto.yaml").c_str());
-		boost->save((OUTPUT_DIR  + id + "_boost.yaml").c_str());
-		network->save((OUTPUT_DIR  + id + "_network.yaml").c_str());
+			LOGI << "Evaluating Network";
+			evalClassifier(network, tdmat, trmat, vdmat, vrmat);
+
+			network->save((OUTPUT_DIR  + id + "_network.yaml").c_str());
+		}
 	}
 	catch (std::exception &_ex)
 	{
