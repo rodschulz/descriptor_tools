@@ -8,6 +8,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/format.hpp>
 #include <yaml-cpp/yaml.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/ml/ml.hpp>
@@ -40,17 +41,22 @@ void loadFromFile(const YAML::Node file_,
 
 	csv_.push_back(file_["grasp"]["id"].as<std::string>());
 
-	data_.push_back(file_["descriptor"]["data"].as<std::vector<float> >());
-	data_.back().push_back(file_["orientation"]["angle"].as<float>());
+	if (file_["result"]["attempt_completed"].as<bool>())
+	{
+		data_.push_back(file_["descriptor"]["data"].as<std::vector<float> >());
+		data_.back().push_back(file_["orientation"]["angle"].as<float>());
 
-	response_.push_back(file_["result"]["success"].as<bool>());
+		response_.push_back(file_["result"]["success"].as<bool>());
+	}
 }
 
-void extractData(const std::string &directory_,
-				 std::vector<std::vector<std::string> > &csv_,
-				 std::vector<std::vector<float> > &data_,
-				 std::vector<float> &response_)
+int extractData(const std::string &directory_,
+				std::vector<std::vector<std::string> > &csv_,
+				std::vector<std::vector<float> > &data_,
+				std::vector<float> &response_)
 {
+	int successfull = 0;
+
 	boost::filesystem::path target(directory_);
 	boost::filesystem::directory_iterator it(target), eod;
 	BOOST_FOREACH(boost::filesystem::path const & filepath, std::make_pair(it, eod))
@@ -60,13 +66,16 @@ void extractData(const std::string &directory_,
 			if (!boost::iequals(filepath.extension().string(), ".yaml"))
 				continue;
 
-			LOGI << "Processing " << filepath.filename();
+			LOGD << "Processing " << filepath.filename();
 			YAML::Node file =  YAML::LoadFile(filepath.string().c_str());
 			csv_.push_back(std::vector<std::string>());
 			loadFromFile(file, csv_.back(), data_, response_);
 
 			// Add experiment and set
 			csv_.back().push_back(filepath.filename().string());
+
+			if (boost::iequals(csv_.back()[2], "true"))
+				successfull++;
 
 			std::string set = filepath.string();
 			set = set.substr(0, set.find_last_of('/'));
@@ -76,6 +85,8 @@ void extractData(const std::string &directory_,
 		else
 			extractData(filepath.string(), csv_, data_, response_);
 	}
+
+	return successfull;
 }
 
 void prepareData(const std::vector<std::vector<float> > &data_,
@@ -114,6 +125,11 @@ SVMPtr trainSVM(const cv::Mat &data_,
 	svmParams.C = 100;
 	svmParams.gamma = 2;
 
+	cv::Mat weights = cv::Mat::zeros(2, 1, CV_32FC1);
+	weights.at<float>(0, 0) = 0.9;
+	weights.at<float>(1, 0) = 0.1;
+	// svmParams.class_weights = &weights.CvMat();
+
 	// Train the SVM
 	SVMPtr svm = SVMPtr(new cv::SVM());
 	svm->train(data_, resp_, cv::Mat(), cv::Mat(), svmParams);
@@ -127,11 +143,69 @@ void evalClassifier(const ModelPtr &model_,
 					const cv::Mat &resp_)
 {
 	bool isSVM = dynamic_cast<cv::SVM *>(model_.get()) != NULL;
+	bool isBoost = dynamic_cast<cv::Boost *>(model_.get()) != NULL;
+	bool isNetwork = dynamic_cast<cv::NeuralNet_MLP *>(model_.get()) != NULL;
 
+
+	cv::Mat output;
 	if (isSVM)
 	{
 		LOGD << "Predicting with SVM";
+		cv::SVM *svm = dynamic_cast<cv::SVM *>(model_.get());
+		svm->predict(data_, output);
 	}
+	if (isBoost)
+	{
+		LOGD << "Predicting with Boost";
+		cv::Boost *boost = dynamic_cast<cv::Boost *>(model_.get());
+		boost->predict(data_, output);
+	}
+	if (isNetwork)
+	{
+		LOGD << "Predicting with Neural Network";
+		cv::NeuralNet_MLP *network = dynamic_cast<cv::NeuralNet_MLP *>(model_.get());
+		network->predict(data_, output);
+	}
+
+
+	int tp = 0, tn = 0, fp = 0, fn = 0;
+	for (int i = 0; i < output.rows; i++)
+	{
+		int prediction = output.at<float>(i);
+		int response = resp_.at<float>(i);
+		if (prediction == 0)
+		{
+			if (response == 0)
+				tn++;
+			else
+				fn++;
+		}
+		else
+		{
+			if (response == 1)
+				tp++;
+			else
+				fp++;
+		}
+	}
+	int realn = tn + fp;
+	int realp = fn + tp;
+	int total = realn + realp;
+
+
+	boost::format ff = boost::format("%.3f");
+	std::ostringstream table;
+	table << "\n";
+	table << "-------------------------------------" << "\taccuracy\t: " << ff % (float(tp + tn) / float(total)) << "\n";
+	table << "|         | pred: 0 | pred: 1 | SUM |" << "\tmissclass\t: " << ff % (float(fp + fn) / float(total)) << "\n";
+	table << "-------------------------------------" << "\tTPR\t\t: " << ff % (float(tp) / float(realp)) << "\n";
+	table << "| resp: 0 |   " << boost::format("%3d") % tn << "   |   " << boost::format("%3d") % fp << "   | " << boost::format("%3d") % realn << " |" << "\tFPR\t\t: " << ff % (float(fp) / float(realn)) << "\n";
+	table << "| resp: 1 |   " << boost::format("%3d") % fn << "   |   " << boost::format("%3d") % tp << "   | " << boost::format("%3d") % realp << " |" << "\tspecificity\t: " << ff % (float(tn) / float(realn)) << "\n";
+	table << "-------------------------------------" << "\tprecision\t: " << ff % (float(tp) / float(tp + fp)) << "\n";
+	table << "|   SUM   |   " << boost::format("%3d") % (tn + fn) << "   |   " << boost::format("%3d") % (fp + tp) << "   | " << boost::format("%3d") % total << " |" << "\tprevalence\t: " << ff % (float(realp) / float(total)) << "\n";
+	table << "-------------------------------------";
+
+	LOGI << table.str();
 }
 
 
@@ -145,10 +219,9 @@ int main(int _argn, char **_argv)
 	try
 	{
 		// Check if enough arguments were given
-		// if (_argn < 2)
-		// 	throw std::runtime_error("Not enough params given\n\tUsage: Trainer <train_dir>");
-		// std::string trainDir = _argv[1];
-		std::string trainDir = "../TrainDataExtractor/input/test/";
+		if (_argn < 2)
+			throw std::runtime_error("Not enough params given\n\tUsage: Trainer <train_dir>");
+		std::string trainDir = _argv[1];
 		LOGI << "START!";
 
 
@@ -156,13 +229,16 @@ int main(int _argn, char **_argv)
 		std::vector<std::vector<std::string> > tcsv;
 		std::vector<std::vector<float> > train;
 		std::vector<float> tresp;
-		extractData(trainDir, tcsv, train, tresp);
+		int successful = extractData(trainDir, tcsv, train, tresp);
+
+		LOGI << "Traversed " << tcsv.size() << " files";
+		LOGI << "\t- completed: " << train.size();
+		LOGI << "\t- successful: " << successful;
+		LOGI << "\t- ratio:: " << float(successful) / float(train.size());
+
 
 		cv::Mat tdmat, trmat;
 		prepareData(train, tresp, tdmat, trmat);
-		LOGD << tdmat;
-		LOGD << "=================";
-		LOGD << trmat;
 
 		SVMPtr svm = trainSVM(tdmat, trmat);
 		evalClassifier(svm, tdmat, trmat);
