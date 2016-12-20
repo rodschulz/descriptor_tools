@@ -5,6 +5,7 @@
 clusters*
 proj/*
 ClassifierTrainer/build/*
+ClassifierTrainer/output/*
 FileCrawler/crawled_files
 DenseEvaluatorRunner/results/*
 DenseEvaluatorRunner/cloud_set*

@@ -14,7 +14,8 @@
 #include <opencv2/ml/ml.hpp>
 
 
-#define LOGGING_LOCATION "./logging.yaml"
+#define LOGGING_LOCATION	"./logging.yaml"
+#define OUTPUT_DIR			"./output/"
 
 
 typedef boost::shared_ptr<cv::StatModel> ModelPtr;
@@ -368,6 +369,23 @@ void evalClassifier(const ModelPtr &model_,
 }
 
 /**************************************************/
+std::string getId(const std::string &dir_)
+{
+	std::string id = dir_;
+	if (*(id.end() - 1) == '/' || *(id.end() - 1) == '\\')
+		id = id.erase(id.length() - 1);
+
+	size_t index = id.find_last_of('/');
+	if (index == std::string::npos)
+		index = id.find_last_of('\\');
+
+	if (index != std::string::npos)
+		id = id.substr(index + 1);
+
+	return id;
+}
+
+/**************************************************/
 int main(int _argn, char **_argv)
 {
 	static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
@@ -433,6 +451,17 @@ int main(int _argn, char **_argv)
 		evalClassifier(boost, tdmat, trmat, vdmat, vrmat);
 		LOGI << "*** Evaluating Network ***";
 		evalClassifier(network, tdmat, trmat, vdmat, vrmat);
+
+
+		LOGI << "Saving classifiers to disk";
+		if (system("mkdir -p " OUTPUT_DIR) != 0)
+			throw std::runtime_error("Can't create output directory");
+
+		std::string id = getId(trainDir);
+		svm->save((OUTPUT_DIR + id + "_svm.yaml").c_str());
+		svm_auto->save((OUTPUT_DIR  + id + "_svm_auto.yaml").c_str());
+		boost->save((OUTPUT_DIR  + id + "_boost.yaml").c_str());
+		network->save((OUTPUT_DIR  + id + "_network.yaml").c_str());
 	}
 	catch (std::exception &_ex)
 	{
