@@ -128,7 +128,6 @@ void prepareData(const std::vector<std::vector<float> > &data_,
 SVMPtr trainSVM(const cv::Mat &data_,
 				const cv::Mat &resp_,
 				const float ratio_,
-				const bool useWeights_,
 				const bool auto_ = false)
 {
 	cv::SVMParams params;
@@ -145,7 +144,7 @@ SVMPtr trainSVM(const cv::Mat &data_,
 	params.term_crit = cvTermCriteria(CV_TERMCRIT_ITER + CV_TERMCRIT_EPS, 10000, 1e-10);
 
 
-	if (useWeights_)
+	if (config["svm"]["useWeights"].as<bool>())
 	{
 		cv::Mat aux = cv::Mat::zeros(2, 1, CV_32FC1);
 		aux.at<float>(0, 0) = 0.5 / (1 - ratio_);
@@ -186,8 +185,7 @@ BoostingPtr trainBoost(const cv::Mat &data_,
 /**************************************************/
 NeuralNetworkPtr trainNetwork(const cv::Mat &data_,
 							  const cv::Mat &resp_,
-							  const float ratio_,
-							  const bool useWeights_)
+							  const float ratio_)
 {
 	cv::ANN_MLP_TrainParams params;
 	params.term_crit = cvTermCriteria(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 10000, 1e-6);
@@ -450,7 +448,6 @@ int main(int _argn, char **_argv)
 
 		LOGI << "START!";
 		config = YAML::LoadFile(CONFIG_LOCATION);
-		bool useWeights = config["useWeights"].as<bool>();
 
 
 		if (system("mkdir -p " OUTPUT_DIR) != 0)
@@ -494,8 +491,8 @@ int main(int _argn, char **_argv)
 		if (config["trainSVM"].as<bool>())
 		{
 			LOGI << "*** Training SVM ***";
-			SVMPtr svm = trainSVM(tdmat, trmat, tratio, useWeights);
-			SVMPtr svm_auto = trainSVM(tdmat, trmat, tratio, useWeights, true);
+			SVMPtr svm = trainSVM(tdmat, trmat, tratio);
+			SVMPtr svm_auto = trainSVM(tdmat, trmat, tratio, true);
 
 			LOGI << "Evaluating SVM";
 			evalClassifier(svm, tdmat, trmat, vdmat, vrmat);
@@ -511,7 +508,6 @@ int main(int _argn, char **_argv)
 		{
 			LOGI << "*** Training Boost ***";
 			BoostingPtr boost = trainBoost(tdmat, trmat, tratio);
-			SVMPtr svm_auto = trainSVM(tdmat, trmat, tratio, useWeights, true);
 
 			LOGI << "Evaluating Boost";
 			evalClassifier(boost, tdmat, trmat, vdmat, vrmat);
@@ -523,7 +519,7 @@ int main(int _argn, char **_argv)
 		if (config["trainNetwork"].as<bool>())
 		{
 			LOGI << "*** Training Network ***";
-			NeuralNetworkPtr network = trainNetwork(tdmat, trmat, tratio, useWeights);
+			NeuralNetworkPtr network = trainNetwork(tdmat, trmat, tratio);
 
 			LOGI << "Evaluating Network";
 			evalClassifier(network, tdmat, trmat, vdmat, vrmat);

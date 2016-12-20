@@ -1,12 +1,12 @@
 ---
-useWeights: true
-
 trainSVM: true
 trainBoost: false
 trainNetwork: false
 
 ##############################
 svm:
+  useWeights: true
+  
   svm_type: 100 #C_SVC=100, NU_SVC=101, ONE_CLASS=102, EPS_SVR=103, NU_SVR=104
   kernel_type: 2 # LINEAR=0, POLY=1, RBF=2, SIGMOID=3
   degree: 2
