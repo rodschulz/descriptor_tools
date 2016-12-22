@@ -51,7 +51,7 @@ set(PCL_BUILD_TYPE Release)
 add_definitions(${PCL_DEFINITIONS})
 add_definitions("-Wall")
 
-include_directories(../include/)
+include_directories(./include/)
 
 # Set the linking dependencies for all the applications
 set(APPS_LINKING_DEPENDENCIES
