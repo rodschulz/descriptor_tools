@@ -12,6 +12,7 @@
 #include <yaml-cpp/yaml.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/ml/ml.hpp>
+#include <fstream>
 
 
 #define OUTPUT_DIR			"./output/"
@@ -51,10 +52,29 @@ void loadFromFile(const YAML::Node file_,
 	if (file_["result"]["attempt_completed"].as<bool>())
 	{
 		data_.push_back(file_["descriptor"]["data"].as<std::vector<float> >());
-		data_.back().push_back(file_["orientation"]["angle"].as<float>());
+		if (config["useAngle"].as<bool>())
+			data_.back().push_back(file_["orientation"]["angle"].as<float>());
 
 		response_.push_back(file_["result"]["success"].as<bool>());
 	}
+}
+
+/**************************************************/
+std::vector<std::string> genCSVHeader()
+{
+	std::vector<std::string> header;
+	header.push_back("object");
+	header.push_back("completed");
+	header.push_back("successful");
+	header.push_back("err_code");
+	header.push_back("cluster");
+	header.push_back("angle");
+	header.push_back("splits");
+	header.push_back("grasp_id");
+	header.push_back("experiment");
+	header.push_back("data_set");
+	header.push_back("descriptor");
+	return header;
 }
 
 /**************************************************/
@@ -431,6 +451,44 @@ std::string getId(const std::string &dir_)
 }
 
 /**************************************************/
+void generateCSV(const std::string &basename_,
+				 const std::vector<std::string> &header_,
+				 const std::vector<std::vector<std::string> > &data_,
+				 const std::vector<std::vector<float> > &descriptor_,
+				 const std::vector<float> &response_)
+{
+	std::ofstream csvData;
+	csvData.open((OUTPUT_DIR + basename_ + "_data.csv").c_str(), std::fstream::out);
+
+	for (size_t i = 0; i < header_.size(); i++)
+		csvData << header_[i] << ",";
+	csvData << "\n";
+
+	for (size_t i = 0; i < data_.size(); i++)
+	{
+		for (size_t j = 0; j < data_[i].size(); j++)
+			csvData << data_[i][j] << ",";
+		csvData << "\n";
+	}
+
+	csvData.close();
+
+
+	std::ofstream csvDesc;
+	csvDesc.open((OUTPUT_DIR + basename_ + "_desc.csv").c_str(), std::fstream::out);
+
+	for (size_t i = 0; i < descriptor_.size(); i++)
+	{
+		csvDesc << response_[i] << ",";
+		for (size_t j = 0; j < descriptor_[i].size(); j++)
+			csvDesc << descriptor_[i][j] << ",";
+		csvDesc << "\n";
+	}
+
+	csvDesc.close();
+}
+
+/**************************************************/
 int main(int _argn, char **_argv)
 {
 	static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
@@ -526,6 +584,11 @@ int main(int _argn, char **_argv)
 
 			network->save((OUTPUT_DIR  + id + "_network.yaml").c_str());
 		}
+
+
+		std::vector<std::string> header = genCSVHeader();
+		generateCSV(id + "_train", header, tcsv, train, tresp);
+		generateCSV(id + "_val", header, vcsv, val, vresp);
 	}
 	catch (std::exception &_ex)
 	{
