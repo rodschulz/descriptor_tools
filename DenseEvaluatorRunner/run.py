@@ -29,8 +29,9 @@ def getClusterNumber(fileName):
 
 ##################################################
 def getDestination(nclusters):
-	# create results directory if it doesnt exists
-	os.makedirs(RESULTS_LOCATION, exist_ok=True)
+	# create results directory if it doesn't exists
+	#os.makedirs(RESULTS_LOCATION, exist_ok=True)
+	subprocess.call(['mkdir','-p', RESULTS_LOCATION])
 
 	# check the destination directory
 	experiment = 1

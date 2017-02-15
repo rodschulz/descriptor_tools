@@ -1,18 +1,20 @@
 ---
 trainSVM: true
-trainBoost: true
-trainNetwork: true
+trainBoost: false
+trainNetwork: false
 
 # true if the angle has to be part of the training data vector
 useAngle: false
 
 ##############################
 svm:
+  showPredictions: true
+
   useWeights: true
 
   svm_type: 100 #C_SVC=100, NU_SVC=101, ONE_CLASS=102, EPS_SVR=103, NU_SVR=104
   kernel_type: 2 # LINEAR=0, POLY=1, RBF=2, SIGMOID=3
-  degree: 2
+  degree: 4
   gamma: 2
   coef0: 0
 
@@ -26,7 +28,7 @@ boost:
   weak_count: 30
   split_criteria: 3 # DEFAULT=0, GINI=1, MISCLASS=3, SQERR=4
   weight_trim_rate: 0.95
-  cv_folds: 5
+  cv_folds: 3
 
 ##############################
 network:
