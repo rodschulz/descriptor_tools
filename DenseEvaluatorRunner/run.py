@@ -8,11 +8,18 @@ import subprocess
 import shutil
 import yaml
 import datetime
+import logging
 
 
+##################################################
+################## APP'S CONFIG ##################
 APP_LOCATION = 'build/DenseEvaluator'
 CONFIG_LOCATION = 'config/config_dense_evaluator.yaml'
 RESULTS_LOCATION = './results/' 
+LOG_LEVEL = logging.INFO
+
+##################################################
+logger = None
 
 
 ##################################################
@@ -23,14 +30,13 @@ def getClusterNumber(fileName):
 			return config['clustering']['clusterNumber']
 
 	except IOError as e:
-		print('Error reading ' + fileName + ': ' + str(e) + ')')
+		logger.error('Error reading ' + fileName + ': ' + str(e) + ')')
 		raise(IOError('Cant get configured clusters number'))
 
 
 ##################################################
 def getDestination(nclusters):
 	# create results directory if it doesn't exists
-	#os.makedirs(RESULTS_LOCATION, exist_ok=True)
 	subprocess.call(['mkdir','-p', RESULTS_LOCATION])
 
 	# check the destination directory
@@ -75,6 +81,15 @@ def main():
 			print('   Usage: python run.py <app_dir_location> <cloud_list_location>\n\n')
 			return
 
+		# setup logging
+		formatter = logging.Formatter('[%(levelname)-5s] %(message)s')
+		logger = logging.getLogger('EXTRACTOR')
+		logger.setLevel(LOG_LEVEL)
+		ch = logging.StreamHandler()
+		ch.setFormatter(formatter)
+		logger.addHandler(ch)
+
+
 		# get the application's directory
 		appDirectory = os.path.abspath(sys.argv[1]) + '/'
 		# get number of clusters to be used in the reduction process
@@ -92,7 +107,7 @@ def main():
 				if line == '':
 					continue;
 
-				print('Processing file: ' + line)
+				logger.info('Processing file: ' + line)
 				
 				# run the app and wait
 				cmd = appDirectory + APP_LOCATION + ' ' + line + ' | tee DenseEvaluator.log; mv DenseEvaluator.log output/' 
@@ -100,13 +115,13 @@ def main():
 				process.wait()
 
 				if process.returncode == 0:
-					print('\t...execution successful, copying results')
+					logger.info('\t...execution successful, copying results')
 					moveOutputData(appDirectory, destination, line)
 				else:
-					print('\t...execution failed')
+					logger.warn('\t...execution failed')
 
 	except IOError as e:
-		print('ERROR: ' + str(e))
+		logger.error('ERROR: ' + str(e))
 
 
 ##################################################
