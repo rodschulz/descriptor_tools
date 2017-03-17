@@ -18,3 +18,4 @@ TrainDataExtractor/*.yaml
 TrainDataExtractor/*.ods
 TrainDataExtractor/input/*
 TrainDataExtractor/output/*
+*.ods

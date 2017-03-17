@@ -23,11 +23,43 @@ logger = None
 
 
 ##################################################
-def getClusterNumber(fileName):
+def computeSizeDCH(config_):
+	nband = int(config_['bandNumber'])
+	stat = config_['stat']
+
+	if (stat == 'mean') or (stat == 'median'):
+		return str(nband * int(config_['binNumber']))
+	elif (stat == 'hist10') or (stat == 'hb10'):
+		return str(nband * 18)
+	elif (stat == 'hist20') or (stat == 'hb20'):
+		return str(nband * 9)
+	else:
+		return 'xx'
+
+
+##################################################
+def getDescriptorData(fileName_):
 	try:
-		with open(fileName, 'r') as configFile:
+		with open(fileName_, 'r') as configFile:
 			config = yaml.load(configFile)
-			return config['clustering']['clusterNumber']
+
+			ncluster = config['clustering']['clusterNumber']
+			dtype = config['descriptor']['type']
+			dsize = 0
+
+			if dtype == 'DCH':
+				dsize = computeSizeDCH(config['descriptor']['DCH'])
+			elif dtype == 'SHOT':
+				dsize = '352'
+			elif dtype == 'PFH':
+				dsize = '125'
+			elif dtype == 'FPFH':
+				dsize = '33'
+			elif dtype == 'SpinImage':
+				dsize = '153'
+
+
+			return [ncluster, dtype, dsize]
 
 	except IOError as e:
 		logger.error('Error reading ' + fileName + ': ' + str(e) + ')')
@@ -35,14 +67,14 @@ def getClusterNumber(fileName):
 
 
 ##################################################
-def getDestination(nclusters):
+def getDestination(nclusters_, dtype_, dsize_):
 	# create results directory if it doesn't exists
 	subprocess.call(['mkdir','-p', RESULTS_LOCATION])
 
 	# check the destination directory
 	experiment = 1
 	while(True):
-		destination = 'clusters' + str(nclusters) + '_exp' + str(experiment)
+		destination = 'clusters' + str(nclusters_) + '_' + dtype_ + dsize_ + '_exp' + str(experiment)
 
 		# check if the experiment number is already used
 		change = False
@@ -60,13 +92,13 @@ def getDestination(nclusters):
 
 
 ##################################################
-def moveOutputData(appDirectory, destination, inputLine):
-	parts = inputLine.split('/')
+def moveOutputData(appDir_, destination_, inputLine_):
+	parts = inputLine_.split('/')
 	inputDir = parts[len(parts) - 2]
 	inputFile = parts[len(parts) - 1].split('.')[0]
 
-	source = appDirectory + 'output/'
-	dest = destination + inputDir + '/' + inputFile + '/'
+	source = appDir_ + 'output/'
+	dest = destination_ + inputDir + '/' + inputFile + '/'
 
 	shutil.copytree(source, dest)
 	shutil.rmtree(source)
@@ -92,10 +124,10 @@ def main():
 
 		# get the application's directory
 		appDirectory = os.path.abspath(sys.argv[1]) + '/'
-		# get number of clusters to be used in the reduction process
-		nclusters = getClusterNumber(appDirectory + CONFIG_LOCATION)
+		# get data about the descriptor
+		nclusters, dtype, dsize = getDescriptorData(appDirectory + CONFIG_LOCATION)
 		# get destination directory
-		destination = getDestination(nclusters)
+		destination = getDestination(nclusters, dtype, dsize)
 
 		# read the input and process the data
 		FNULL = open(os.devnull, 'w')
