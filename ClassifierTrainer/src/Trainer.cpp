@@ -307,6 +307,18 @@ void evalClassifier(const ModelPtr &model_,
 
 		svm->predict(tdata_, tout);
 		svm->predict(vdata_, vout);
+
+		bool show = config["svm"]["showPredictions"].as<bool>();
+		if (show)
+		{
+			LOGD << "sup vectors: " << svm->get_support_vector_count();
+			for (int i = 0; show && i < vdata_.rows; i++)
+			{
+				float distance = svm->predict(vdata_.row(i), true);
+				int label = svm->predict(vdata_.row(i), false);
+				LOGD << "resp: " << vresp_.row(i) << " - label: " << label << " - dist: " << distance;
+			}
+		}
 	}
 	else if (isBoost)
 	{

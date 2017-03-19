@@ -1,5 +1,5 @@
 ---
-trainSVM: true
+trainSVM: false
 trainBoost: false
 trainNetwork: false
 
@@ -24,6 +24,8 @@ svm:
 
 ##############################
 boost:
+  showPredictions: true
+
   boost_type: 0 # DISCRETE=0, REAL=1, LOGIT=2, GENTLE=3
   weak_count: 30
   split_criteria: 3 # DEFAULT=0, GINI=1, MISCLASS=3, SQERR=4
