@@ -325,6 +325,21 @@ void evalClassifier(const ModelPtr &model_,
 		LOGD << "Predicting with Boost";
 		cv::Boost *boost = dynamic_cast<cv::Boost *>(model_.get());
 
+		bool show = config["boost"]["showPredictions"].as<bool>();
+		if (show)
+		{
+			for (int i = 0; show && i < vdata_.rows; i++)
+			{
+				float votes = boost->predict(vdata_.row(i), cv::Mat(), cv::Range::all(), false, true);
+				float label = boost->predict(vdata_.row(i), cv::Mat(), cv::Range::all(), false, false);
+				LOGD << "resp: " << vresp_.row(i) << " - label: " << label << " - votes: " << votes;
+			}
+
+
+
+
+		}
+
 		tout = cv::Mat::zeros(tdata_.rows, 1, CV_32FC1);
 		for (int i = 0; i < tdata_.rows; i++)
 			tout.at<float>(i, 0) = boost->predict(tdata_.row(i));
