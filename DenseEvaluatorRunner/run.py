@@ -46,9 +46,11 @@ def getDescriptorData(fileName_):
 			ncluster = config['clustering']['clusterNumber']
 			dtype = config['descriptor']['type']
 			dsize = 0
+			stat = ''
 
 			if dtype == 'DCH':
 				dsize = computeSizeDCH(config['descriptor']['DCH'])
+				stat = '_' + config['descriptor']['DCH']['stat']
 			elif dtype == 'SHOT':
 				dsize = '352'
 			elif dtype == 'PFH':
@@ -59,7 +61,7 @@ def getDescriptorData(fileName_):
 				dsize = '153'
 
 
-			return [ncluster, dtype, dsize]
+			return [ncluster, dtype, dsize, stat]
 
 	except IOError as e:
 		logger.error('Error reading ' + fileName + ': ' + str(e) + ')')
@@ -67,14 +69,14 @@ def getDescriptorData(fileName_):
 
 
 ##################################################
-def getDestination(nclusters_, dtype_, dsize_):
+def getDestination(nclusters_, dtype_, dsize_, stat_):
 	# create results directory if it doesn't exists
 	subprocess.call(['mkdir','-p', RESULTS_LOCATION])
 
 	# check the destination directory
 	experiment = 1
 	while(True):
-		destination = 'clusters' + str(nclusters_) + '_' + dtype_ + dsize_ + '_exp' + str(experiment)
+		destination = 'clusters' + str(nclusters_) + '_' + dtype_ + dsize_ + stat_ + '_exp' + str(experiment)
 
 		# check if the experiment number is already used
 		change = False
@@ -125,9 +127,9 @@ def main():
 		# get the application's directory
 		appDirectory = os.path.abspath(sys.argv[1]) + '/'
 		# get data about the descriptor
-		nclusters, dtype, dsize = getDescriptorData(appDirectory + CONFIG_LOCATION)
+		nclusters, dtype, dsize, stat = getDescriptorData(appDirectory + CONFIG_LOCATION)
 		# get destination directory
-		destination = getDestination(nclusters, dtype, dsize)
+		destination = getDestination(nclusters, dtype, dsize, stat)
 
 		# read the input and process the data
 		FNULL = open(os.devnull, 'w')
