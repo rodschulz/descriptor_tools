@@ -62,3 +62,7 @@ set(APPS_LINKING_DEPENDENCIES
 file(GLOB TRAINER_SRC "Trainer.cpp")
 add_executable(Trainer ${TRAINER_SRC})
 target_link_libraries(Trainer ${APPS_LINKING_DEPENDENCIES})
+
+file(GLOB ROC_SRC "ROC.cpp")
+add_executable(ROC ${ROC_SRC})
+target_link_libraries(ROC ${APPS_LINKING_DEPENDENCIES})
