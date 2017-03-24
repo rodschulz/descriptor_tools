@@ -334,10 +334,6 @@ void evalClassifier(const ModelPtr &model_,
 				float label = boost->predict(vdata_.row(i), cv::Mat(), cv::Range::all(), false, false);
 				LOGD << "resp: " << vresp_.row(i) << " - label: " << label << " - votes: " << votes;
 			}
-
-
-
-
 		}
 
 		tout = cv::Mat::zeros(tdata_.rows, 1, CV_32FC1);
