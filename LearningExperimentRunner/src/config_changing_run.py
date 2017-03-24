@@ -1,6 +1,6 @@
 '''
 @author: rodrigo
-2016
+2017
 '''
 import time
 import ruamel.yaml
@@ -14,8 +14,7 @@ CLASSIFIER_DIR = LOCAL_DIR + 'classifiers/'
 CONFIG_FILE = CONFIG_DIR + 'config.yaml'
 
 
-# angles = [4, 5, 6]
-angles = [5, 6]
+angles = [4, 5, 6]
 classifiers = ['DCH_72_split4_beer_drill_svm_auto.yaml', 'DCH_72_split5_beer_drill_svm_auto.yaml', 'DCH_72_split45_beer_drill_svm_auto.yaml']
 
 
